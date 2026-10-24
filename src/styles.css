@@ -1,0 +1,4 @@
+:root{--bg:#03060f;--panel:rgba(20,60,110,.28);--edge:#2fd0ff;--text:#d8f3ff;color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Rajdhani","Exo 2",system-ui,sans-serif;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+.panel{max-width:560px;margin:24px auto;padding:16px;background:var(--panel);border:1px solid var(--edge);box-shadow:0 0 12px rgba(47,208,255,.35)}
+h1{letter-spacing:.2em;margin:0 0 8px}table{width:100%;border-collapse:collapse}td,th{padding:4px 8px;text-align:left}
