@@ -40,11 +40,25 @@ export async function startupCheck(db: SlsDb): Promise<{ fresh: boolean; errors:
   const fresh = Object.keys(p.meta).length === 0;
   return { fresh, errors: fresh ? [] : validatePayload(p).errors };
 }
+async function writePayloadInsideTransaction(db: SlsDb, p: Payload): Promise<void> {
+  for (const t of SINGLETONS) { await tbl(db, t).clear(); if (Object.keys(p[t]).length) await tbl(db, t).bulkAdd([{ ...p[t], id: 'singleton' }]); }
+  for (const t of COLLECTIONS) { await tbl(db, t).clear(); await tbl(db, t).bulkAdd(p[t]); }
+}
 export async function replaceAll(db: SlsDb, p: Payload): Promise<void> {
   type Tx = { transaction(m: string, t: string[], f: () => Promise<void>): Promise<void> };
-  await (db as unknown as Tx).transaction('rw', [...TABLES], async () => {
-    for (const t of SINGLETONS) { await tbl(db, t).clear(); if (Object.keys(p[t]).length) await tbl(db, t).bulkAdd([{ ...p[t], id: 'singleton' }]); }
-    for (const t of COLLECTIONS) { await tbl(db, t).clear(); await tbl(db, t).bulkAdd(p[t]); }
+  await (db as unknown as Tx).transaction('rw', [...TABLES], async () => writePayloadInsideTransaction(db, p));
+}
+/** Atomically read, validate, mutate and write all game tables; used by day close and quest commands. */
+export async function mutatePayload<T>(db: SlsDb, mutator: (current: Payload) => { payload: Payload; result: T }): Promise<T> {
+  type Tx = { transaction<R>(m: string, t: string[], f: () => Promise<R>): Promise<R> };
+  return (db as unknown as Tx).transaction('rw', [...TABLES], async () => {
+    await assertOpenable(db);
+    const current = await loadPayload(db);
+    const changed = mutator(current);
+    const validation = validatePayload(changed.payload);
+    if (validation.errors.length) throw new Error(`Refusing to commit invalid payload: ${validation.errors.join('; ')}`);
+    await writePayloadInsideTransaction(db, validation.payload ?? changed.payload);
+    return changed.result;
   });
 }
 export async function takeSnapshot(db: SlsDb, reason: string, now = new Date()): Promise<void> {
