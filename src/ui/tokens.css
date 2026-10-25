@@ -1,0 +1,60 @@
+/* Design tokens (single source for colour/space/type; contrast is asserted in tests). */
+:root{
+  --bg:#03060f; --surface:#081426; --surface-2:#0d2038; --edge:#2fd0ff; --edge-dim:#1b6f8c;
+  --text:#d8f3ff; --text-muted:#9bbdd1; --accent:#2fd0ff; --accent-ink:#021019; --danger:#ff7b7b; --warn:#ffd166; --ok:#6ff0b0; --focus:#ffffff;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --radius:2px;
+  --font-ui:"Rajdhani","Exo 2","Segoe UI",system-ui,sans-serif; --font-mono:"Share Tech Mono",ui-monospace,Consolas,monospace;
+  --glow:0 0 10px rgba(47,208,255,.35); color-scheme:dark;
+}
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#0a2340 0%,var(--bg) 60%) fixed;color:var(--text);font:400 1rem/1.5 var(--font-ui);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+h1,h2,h3{font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0 0 var(--s3)} h1{font-size:1.5rem} h2{font-size:1.2rem} h3{font-size:1rem}
+a,button,input,select,textarea{font:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.skip-link{position:absolute;left:var(--s3);top:-100px;background:var(--accent);color:var(--accent-ink);padding:var(--s2) var(--s4);z-index:10}
+.skip-link:focus{top:var(--s3)}
+.shell{display:grid;min-height:100vh;grid-template-rows:auto 1fr auto;grid-template-columns:minmax(0,1fr)}
+.shell__main{padding:var(--s4);max-width:960px;width:100%;margin:0 auto}
+.shell__head{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s3) var(--s4);border-bottom:1px solid var(--edge-dim)}
+.brand{letter-spacing:.3em;font-weight:700;color:var(--accent)}
+.panel{position:relative;background:linear-gradient(180deg,rgba(13,32,56,.82),rgba(8,20,38,.9));border:1px solid var(--edge);box-shadow:var(--glow),inset 0 0 24px rgba(47,208,255,.06);
+  padding:var(--s4);margin:0 0 var(--s4);border-radius:var(--radius)}
+.panel::before,.panel::after{content:"";position:absolute;width:12px;height:12px;border:2px solid var(--accent);pointer-events:none}
+.panel::before{top:-2px;left:-2px;border-right:0;border-bottom:0}.panel::after{bottom:-2px;right:-2px;border-left:0;border-top:0}
+.panel--enter{animation:scan .45s ease-out}
+@keyframes scan{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.panel__title{margin-bottom:var(--s3);padding-bottom:var(--s2);border-bottom:1px solid var(--edge-dim)}
+.btn{background:transparent;color:var(--text);border:1px solid var(--edge);padding:var(--s2) var(--s4);min-height:44px;min-width:44px;cursor:pointer;letter-spacing:.08em;text-transform:uppercase;border-radius:var(--radius)}
+.btn:hover{background:rgba(47,208,255,.12)} .btn--primary{background:var(--accent);color:var(--accent-ink);font-weight:700} .btn--primary:hover{background:#6fe0ff}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.field{display:grid;gap:var(--s1);margin:0 0 var(--s4)} .field label,.field legend{color:var(--text);font-weight:600}
+.field input[type=text],.field input[type=time],.field select{background:var(--bg);color:var(--text);border:1px solid var(--edge-dim);padding:var(--s2) var(--s3);min-height:44px;border-radius:var(--radius);width:100%}
+.hint{color:var(--text-muted);font-size:.9rem} .error{color:var(--danger);font-weight:600}
+.checks{display:grid;gap:var(--s2);border:0;padding:0;margin:0} .check{display:flex;gap:var(--s3);align-items:center;min-height:44px}
+.check input{width:22px;height:22px;accent-color:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:var(--s3);justify-content:space-between;margin-top:var(--s5)}
+.sysmsg{border-left:4px solid var(--accent);background:var(--surface-2);padding:var(--s3) var(--s4);margin:0 0 var(--s3);font-family:var(--font-mono);letter-spacing:.06em}
+.sysmsg--penalty{border-color:var(--danger)} .sysmsg--reward{border-color:var(--warn)} .sysmsg--ok{border-color:var(--ok)}
+.sysmsg__kind{display:block;font-weight:700;color:var(--accent)} .sysmsg--penalty .sysmsg__kind{color:var(--danger)} .sysmsg--reward .sysmsg__kind{color:var(--warn)} .sysmsg--ok .sysmsg__kind{color:var(--ok)}
+.bar{height:10px;background:var(--bg);border:1px solid var(--edge-dim)} .bar>span{display:block;height:100%;background:var(--accent)}
+.progress-dots{display:flex;gap:var(--s2);margin:0 0 var(--s4);padding:0;list-style:none} .progress-dots li{width:28px;height:6px;background:var(--edge-dim)} .progress-dots li[aria-current=step]{background:var(--accent)}
+.nav{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--edge);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+.nav__item{flex:1 1 0;min-width:0;min-height:56px;padding:0 var(--s1);background:transparent;color:var(--text-muted);border:0;border-top:3px solid transparent;cursor:pointer;letter-spacing:.04em;font-size:.9rem;text-transform:uppercase;overflow-wrap:anywhere}
+.nav__item[aria-current=page]{color:var(--accent);border-top-color:var(--accent)}
+.shell{padding-bottom:64px}
+.badge{display:inline-block;border:1px solid var(--warn);color:var(--warn);padding:0 var(--s2);font-size:.85rem;letter-spacing:.1em;text-transform:uppercase}
+@media (min-width:768px){
+  .shell{grid-template-columns:200px minmax(0,1fr);grid-template-rows:auto 1fr;padding-bottom:0}
+  .shell__head{grid-column:1/-1}
+  .nav{position:static;flex-direction:column;border-top:0;border-right:1px solid var(--edge-dim);padding:var(--s3);gap:var(--s2)}
+  .nav__item{min-height:48px;text-align:left;padding:0 var(--s3);border-top:0;border-left:3px solid transparent;letter-spacing:.1em;font-size:1rem;flex:0 0 auto}
+  .nav__item[aria-current=page]{border-left-color:var(--accent)}
+}
+@media (max-width:420px){ .shell__main{padding:var(--s3)} h1{font-size:1.25rem} .actions .btn{flex:1 1 100%} }
+/* Effects: reduced/minimal remove motion and glow; prefers-reduced-motion forces the same. */
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+[data-effects="reduced"] *,[data-effects="minimal"] *{animation:none!important;transition:none!important}
+[data-effects="minimal"] .panel{box-shadow:none}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:var(--s2) var(--s4)} dt{color:var(--text-muted)} dd{margin:0}

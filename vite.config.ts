@@ -17,5 +17,5 @@ export default defineConfig({
       workbox: { globPatterns: ['**/*.{js,css,html,svg,woff2}'] },
     }),
   ],
-  test: { environment: 'node' },
+  test: { environment: 'node', exclude: ['tests/browser/**', 'node_modules/**'] },
 });

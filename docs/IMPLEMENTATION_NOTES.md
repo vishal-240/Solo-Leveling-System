@@ -27,5 +27,24 @@
 | Attribute titles and messages at 10/25/50 | `attributes.test.ts` |
 | Idempotency; undo/re-completion consistency | scenario and attribute tests |
 
-## Not verified
-Real browsers, installed-PWA behaviour, offline use and the GitHub Pages workflow; no screens exist yet (P6+).
+## P5 checkpoint — not verified at that checkpoint
+At the P5 checkpoint, real-browser behaviour, installed-PWA behaviour, offline use and the GitHub Pages workflow had not yet been verified, and no screens existed yet. The newer P6 browser evidence and current deployment status are documented below.
+
+## P6 - Visual system and onboarding (branch `p6-visual-onboarding`)
+Built: design tokens (`src/ui/tokens.css`), reusable components (`src/ui/components.tsx`: Panel, SystemMessage, Nav, Shell, Field), responsive shell (bottom nav under 768 px, left rail above),
+Player Awakening (`src/onboarding/*`: model, atomic idempotent `registerPlayer`, step UI) and `App.tsx` (loading, error, onboarding, ready shell).
+Decisions where the spec is silent: no starter quests are preselected (skipping gives zero quests); skip restores that step's defaults; the draft is kept in `localStorage`
+(non-critical convenience, cleared on registration) while registration itself is one IndexedDB transaction; "timer behavior" and "penalty strictness" are shown as fixed rules,
+because the spec defines no configurable options for them; the shell header shows real level/rank/XP from the ledger; Quests, Status, History and Settings are placeholders marked
+"Not yet implemented" (P7/P8). Attribute goals are stored as an extra `goal` field on attribute rows; the optional starting title as `player.startingTitle`.
+
+### Verified here (automated, jsdom + axe-core)
+Onboarding end to end (validation, skip, resume after reload, corrupt draft, confirmation, double submit, no duplicate registration), axe (serious/critical = none) on every step, the
+confirmation and the shell, keyboard navigation, skip link, focus moved to the step heading, System-message roles, effects tier attribute, token contrast (computed from the CSS).
+### Real-browser verification (branch `p6-browser-verification`)
+A Chromium 131 binary was obtained from the npm package `@sparticuz/chromium` (Playwright's own download host is blocked in the build environment) and driven with `playwright-core`; `tests/browser/browser.test.ts`
+(`npm run test:browser`, outside `npm test`) passed 8/8 against the production build. At 360 px and 1440 px it checks: horizontal overflow, clipped text, overlapping and obscured controls, 44 px targets,
+navigation versus content geometry, axe with colour contrast enabled, keyboard focus order/visibility/outline, focus moving to the step heading, reduced motion, and a service-worker/offline-reload probe.
+**Defect found and fixed:** the four-item bottom navigation overflowed a 360 px viewport. Tests wait for entry animations to finish before measuring (a fading panel has partial opacity and fails contrast otherwise).
+### Still not verified
+Firefox/WebKit/mobile browsers, real devices, PWA installation, device lock and offline beyond the localhost probe. The existing main/P5 checkpoint is deployed, but this P6 branch has not yet been deployed; the live site still shows the older placeholder shell.
