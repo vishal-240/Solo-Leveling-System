@@ -1,6 +1,7 @@
 import { attrLevelFromXp, attrTotalToReach, deductionFor, levelFromXp, rankForLevel, timedTier, totalXpToReach } from '../engine/progression';
 import { emptyPayload, SCHEMA_VERSION, validatePayload, type Obj, type Payload } from '../persist/backup';
 import { dayEndForSettings, gameDayKeyForSettings, getPolicyForDay, shiftDayKey, type SettingsLike } from './calendar';
+import { syncProgressionInPlace } from '../rewards/rewards';
 import { generateOccurrencesForDay, isProtectedRestDay, newUlid, type QuestOccurrence, type QuestSnapshot } from './domain';
 
 export interface ClosedDaySummary { dayKey: string; completed: number; missed: number; xpEarned: number; xpForfeited: number; xpDeducted: number; restDay: boolean }
@@ -243,7 +244,7 @@ export function closeDayPayload(input: Payload, now = new Date()): DayCloseResul
     closedDays.length > 1
       ? `ABSENCE REPORT — processed ${closedDays.length} day(s): ${closedDays.reduce((s, x) => s + x.missed, 0)} missed occurrence(s).`
       : 'DAILY QUEST UPDATED — your current game-day quests are ready.', currentDayKey);
-  refreshCaches(p);
+  refreshCaches(p); syncProgressionInPlace(p, now);
   const validation = validatePayload(p);
   if (validation.errors.length) throw new Error(`Day-close invariant failed: ${validation.errors.join('; ')}`);
   return { payload: validation.payload ?? p, currentDayKey, initialized, noOp: false, closedDays, generatedToday,

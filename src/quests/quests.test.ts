@@ -8,6 +8,7 @@ import {
   type QuestDefinition,
 } from './domain';
 import { closeDayPayload, createRegisteredPayload } from './dayClose';
+import { syncProgressionInPlace } from '../rewards/rewards';
 
 const t0 = new Date('2026-10-20T00:00:00.000Z');
 const def = (over: Partial<QuestDefinition> = {}): QuestDefinition => ({ title: 'Study algorithms', category: 'coding', kind: 'standard', difficulty: 'medium',
@@ -209,6 +210,7 @@ describe('day close, absence handling and idempotency', () => {
     const p = registered(); p.player.lastProcessedDayKey = '2026-10-20'; p.player.streakShields = 2;
     const total = 5000; p.xpTransactions = [xpRow('pl-seed', 'player', total), xpRow('attr-seed', 'coding', total)]; p.player.xpTotal = total; p.player.level = levelFromXp(total);
     const coding = p.attributes.find((a) => a.id === 'coding')!; coding.xpTotal = total; coding.level = attrLevelFromXp(total);
+    syncProgressionInPlace(p, t0); Object.assign(p.player, { streakShields: 2, queuedShields: 0, unspentPoints: 0 }); // seeded history already had its level rewards
     const created = createTemplate(p, def({ difficulty: 'hard' }), '2026-10-01', t0);
     const result = closeDayPayload(created.payload, new Date('2026-10-24T10:00:00Z'));
     // Day 21 consumes one shield before its trigger is evaluated; the pending penalty
