@@ -21,6 +21,9 @@ function setup(defs: QuestDefinition[] = [timed()]) {
 }
 const run = (p: Payload, id: string, from: number, to: number) => { for (let m = from + 8; m <= to; m += 8) p = T.heartbeat(p, id, at(m)).payload; return p; };
 const code = (f: () => unknown) => { try { f(); } catch (e) { return (e as T.TimerError).code; } return 'no-error'; };
+const seedBase = (p: Payload, amount = 50): Payload => { const q = structuredClone(p); // prior XP so a 100 XP award does not cross a level
+  for (const scope of ['player', 'coding']) q.xpTransactions.push({ id: `seed-${scope}`, at: '2026-10-01T00:00:00Z', dayKey: '2026-10-01', scope, kind: 'quest_award', requestedDelta: amount, appliedDelta: amount, idempotencyKey: `seed:${scope}` });
+  return q; };
 const xp = (p: Payload, scope: string) => p.xpTransactions.filter((t) => t.scope === scope).reduce((s, t) => s + Number(t.appliedDelta), 0);
 const valid = (p: Payload) => expect(validatePayload(p).errors).toEqual([]);
 
@@ -157,18 +160,27 @@ describe('completion, banking, double submission, undo (ledger invariants)', () 
     expect(done.xpTransactions).toHaveLength(2);
   });
   it('undo within 2 minutes reverses via ledger; one undo per occurrence; re-completion allowed once', () => {
-    const { q, id } = full(); const done = T.completeTimer(q, id, true, at(60)).payload;
+    const { q: q0, id } = full(); const q = seedBase(q0); const done = T.completeTimer(q, id, true, at(60)).payload;
     expect(code(() => T.undoCompletion(done, id, new Date(at(60).getTime() + 120_001)))).toBe('UNDO_EXPIRED');
     const undone = T.undoCompletion(done, id, new Date(at(60).getTime() + 120_000)).payload;
-    expect([xp(undone, 'player'), xp(undone, 'coding')]).toEqual([0, 0]);
+    expect([xp(undone, 'player'), xp(undone, 'coding')]).toEqual([50, 50]);
     expect(undone.occurrences[0]).toMatchObject({ state: 'OPEN', awardedXp: 0 });
     expect(T.timerViews(undone, at(62))[0]).toMatchObject({ status: 'paused', blocks: 4 });
     valid(undone);
     const again = T.completeTimer(undone, id, true, at(63)).payload;
-    expect(xp(again, 'player')).toBe(100); valid(again);
-    expect(new Set(again.xpTransactions.map((t) => t.idempotencyKey)).size).toBe(6);
+    expect(xp(again, 'player')).toBe(150); valid(again);
+    expect(new Set(again.xpTransactions.map((t) => t.idempotencyKey)).size).toBe(8);
+    expect(again.levelEvents.map((e) => e.level)).toEqual([2]); // one level event despite undo and re-completion
     expect(code(() => T.undoCompletion(again, id, at(64)))).toBe('UNDO_USED');
     expect(code(() => T.undoCompletion(q, id, at(64)))).toBe('NOT_COMPLETED');
+  });
+  it('undo policy: inside the 2-minute window an undo that would remove a reached level is refused and changes nothing', () => {
+    const { q, id } = full(); const done = T.completeTimer(q, id, true, at(60)).payload; // 0 -> 100 XP crosses level 2
+    expect(done.levelEvents.map((e) => e.level)).toEqual([2]);
+    const inside = new Date(at(60).getTime() + 30_000);
+    expect(code(() => T.undoCompletion(done, id, inside))).toBe('UNDO_BLOCKED');
+    expect(done.occurrences[0]).toMatchObject({ state: 'COMPLETED', awardedXp: 100 }); expect(xp(done, 'player')).toBe(100); valid(done);
+    expect(code(() => T.undoCompletion(done, id, new Date(at(60).getTime() + 121_000)))).toBe('UNDO_EXPIRED'); // the window check applies first
   });
   it('banking partial progress awards full blocks only; day close deducts on the unearned remainder', () => {
     const { p, ids } = setup(); const id = ids[0]!; let q = T.startTimer(p, id, at(0)).payload; q = run(q, id, 0, 35);
@@ -205,7 +217,7 @@ describe('persistence: reload, app close and retry', () => {
   let db: SlsDb;
   beforeEach(async () => { db = new SlsDb(`timer-${Math.random()}`); await db.open(); });
   it('reconstructs a running session after reopening the database; retries cannot double award', async () => {
-    const { p, ids } = setup(); const id = ids[0]!; await replaceAll(db, p);
+    const { p: p0, ids } = setup(); const id = ids[0]!; const p = seedBase(p0); await replaceAll(db, p);
     await RT.startTimerDb(db, id, at(0)); await RT.heartbeatDb(db, id, at(8));
     db.close(); await db.open(); // "app close"
     const view = T.timerViews(await loadPayload(db), at(12))[0]!;
@@ -215,9 +227,9 @@ describe('persistence: reload, app close and retry', () => {
     db.close(); await db.open(); // reload, then a retried submit
     await expect(RT.completeTimerDb(db, id, true, at(61))).rejects.toMatchObject({ code: 'ALREADY_COMPLETED' });
     const after = await loadPayload(db);
-    expect(after.xpTransactions).toHaveLength(2); expect(validatePayload(after).errors).toEqual([]);
+    expect(after.xpTransactions).toHaveLength(4); expect(validatePayload(after).errors).toEqual([]);
     await expect(RT.undoCompletionDb(db, id, at(61))).resolves.toBeUndefined();
-    expect(xp(await loadPayload(db), 'player')).toBe(0);
+    expect(xp(await loadPayload(db), 'player')).toBe(50);
   });
   it('a failed action leaves stored data untouched', async () => {
     const { p, ids } = setup(); await replaceAll(db, p); const stored = await loadPayload(db);

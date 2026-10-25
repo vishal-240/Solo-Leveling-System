@@ -2,7 +2,9 @@
 // reconstructed from stored timestamps, never from a running JavaScript timer.
 import { BLOCK_MS, timedBlocks, timedXp } from '../engine/progression';
 import type { Obj, Payload } from '../persist/backup';
+import { levelFromXp, totalXpToReach } from '../engine/progression';
 import { refreshProgressionCaches, newUlid } from '../quests/domain';
+import { syncProgressionInPlace } from '../rewards/rewards';
 
 export const GAP_THRESHOLD_MS = 10 * 60_000;
 export const UNDO_WINDOW_MS = 2 * 60_000;
@@ -10,7 +12,7 @@ export const ONE_OFF_DAILY_XP_CAP = 300;
 export type TimerErrorCode = 'NOT_FOUND' | 'NOT_OPEN' | 'NOT_TIMED' | 'NOT_STANDARD' | 'DAY_ENDED' | 'ONE_TIMER_ONLY' | 'ALREADY_RUNNING'
   | 'NOT_RUNNING' | 'NOT_PAUSED' | 'NO_SESSION' | 'GAP_PENDING' | 'NO_GAP' | 'INVALID_GAP_ANSWER' | 'CONFIRMATION_REQUIRED'
   | 'NOT_ENOUGH_TIME' | 'NOTHING_TO_BANK' | 'USE_COMPLETE' | 'NOT_BANKABLE' | 'ALREADY_COMPLETED' | 'UNDO_EXPIRED' | 'UNDO_USED'
-  | 'NOT_COMPLETED' | 'DUPLICATE_AWARD';
+  | 'UNDO_BLOCKED' | 'NOT_COMPLETED' | 'DUPLICATE_AWARD';
 export class TimerError extends Error {
   constructor(public code: TimerErrorCode, message?: string, public gapMs?: number) { super(message ?? code); }
 }
@@ -137,7 +139,7 @@ function finish(p: Payload, o: Obj, xp: number, now: Date, state: 'COMPLETED' | 
   const paid = Math.min(xp, oneOffRoom(p, o));
   writeLedger(p, o, kind, paid, now);
   o.state = state; o.awardedXp = paid; if (state === 'COMPLETED') o.completedAt = now.toISOString(); else o.bankedAt = now.toISOString();
-  refreshProgressionCaches(p);
+  refreshProgressionCaches(p); syncProgressionInPlace(p, now);
 }
 function sessionForCompletion(p: Payload, o: Obj, now: Date): { s: Obj; active: number } {
   const s = sessionOf(p, String(o.id)) ?? fail('NO_SESSION', 'Timed quests require the timer');
@@ -178,6 +180,15 @@ export function undoCompletion(input: Payload, occId: string, now: Date): R<void
   if (now.getTime() - ms(o.completedAt) > UNDO_WINDOW_MS) fail('UNDO_EXPIRED');
   if (countKind(p, occId, 'reversal') >= 1) fail('UNDO_USED');
   const paid = Number(o.awardedXp ?? 0);
+  // UNDO POLICY (conservative, documented in docs/IMPLEMENTATION_NOTES.md): the general rule allows undo for 2 minutes, but
+  // the frozen invariant says levels and ranks never decrease (3.7). When reversing would drop the player below the start of
+  // the current level, the invariant wins and the undo is refused (UNDO_BLOCKED) even inside the window. Level events and
+  // rewards therefore always match the ledger and cannot be farmed by undo/re-complete. Only an explicit spec decision
+  // (for example a reversible level-up) could change this.
+  if (paid > 0) {
+    const total = arr(p, 'xpTransactions').filter((t) => t.scope === 'player').reduce((a, t) => a + Number(t.appliedDelta), 0);
+    if (total - paid < totalXpToReach(levelFromXp(total))) fail('UNDO_BLOCKED', 'Undo would remove a level that was already reached');
+  }
   if (paid > 0) for (const scope of ['player', snap(o).category]) {
     const total = arr(p, 'xpTransactions').filter((t) => t.scope === scope).reduce((a, t) => a + Number(t.appliedDelta), 0);
     const applied = Math.min(paid, Math.max(0, total));
@@ -186,6 +197,6 @@ export function undoCompletion(input: Payload, occId: string, now: Date): R<void
   }
   o.state = 'OPEN'; delete o.completedAt; o.awardedXp = 0;
   const s = sessionOf(p, occId); if (s && s.status === 'closed') { s.status = 'paused'; delete s.closedReason; }
-  refreshProgressionCaches(p); return { payload: p, result: undefined };
+  refreshProgressionCaches(p); syncProgressionInPlace(p, now); return { payload: p, result: undefined };
 }
 export const BLOCK_MINUTES = BLOCK_MS / 60_000;
