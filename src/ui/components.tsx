@@ -9,11 +9,11 @@ export function Panel({ title, children, enter = false, as: H = 'h2' }: { title?
     </section>
   );
 }
-export type SystemKind = 'info' | 'ok' | 'reward' | 'penalty';
+export type SystemKind = 'info' | 'ok' | 'reward' | 'penalty' | 'error';
 /** Terse System message. Penalties are announced assertively (role=alert); everything else politely (role=status). */
 export function SystemMessage({ title, children, kind = 'info' }: { title: string; children?: ReactNode; kind?: SystemKind }) {
   return (
-    <div className={`sysmsg${kind === 'info' ? '' : ` sysmsg--${kind}`}`} role={kind === 'penalty' ? 'alert' : 'status'}>
+    <div className={`sysmsg${kind === 'info' ? '' : ` sysmsg--${kind === 'error' ? 'penalty' : kind}`}`} role={kind === 'penalty' || kind === 'error' ? 'alert' : 'status'}>
       <span className="sysmsg__kind">{title}</span>
       {children}
     </div>

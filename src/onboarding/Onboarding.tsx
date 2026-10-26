@@ -49,7 +49,9 @@ export function Onboarding({ db, onRegistered, now = () => new Date(), storage =
       <h1 ref={heading} tabIndex={-1}>System</h1>
       <Panel title="Registration complete" enter>
         <SystemMessage title="PLAYER REGISTERED" kind="ok">Welcome, {effectiveName(draft)}.</SystemMessage>
-        <SystemMessage title="DAILY QUEST UPDATED">{done.generated} quest{done.generated === 1 ? '' : 's'} generated for today from {done.quests} recurring quest{done.quests === 1 ? '' : 's'}.</SystemMessage>
+        {done.generated > 0
+          ? <SystemMessage title="DAILY QUEST UPDATED">{done.generated} quest{done.generated === 1 ? '' : 's'} generated for today from {done.quests} recurring quest{done.quests === 1 ? '' : 's'}.</SystemMessage>
+          : <SystemMessage title="NO QUESTS YET">You have no quests yet. Create your first quest on the Quests screen.</SystemMessage>}
         <div className="actions"><button type="button" className="btn btn--primary" onClick={onRegistered}>Enter the System</button></div>
       </Panel>
     </main>

@@ -243,7 +243,7 @@ export function closeDayPayload(input: Payload, now = new Date()): DayCloseResul
   addMessage(p, now, closedDays.length > 1 ? 'ABSENCE REPORT' : 'DAILY QUEST UPDATED',
     closedDays.length > 1
       ? `ABSENCE REPORT — processed ${closedDays.length} day(s): ${closedDays.reduce((s, x) => s + x.missed, 0)} missed occurrence(s).`
-      : 'DAILY QUEST UPDATED — your current game-day quests are ready.', currentDayKey);
+      : (() => { const n = p.occurrences.filter((o) => o.dayKey === currentDayKey).length; return n > 0 ? `DAILY QUEST UPDATED — ${n} quest${n === 1 ? '' : 's'} for the current game day.` : 'DAILY QUEST UPDATED — no quests are scheduled for the current game day.'; })(), currentDayKey);
   refreshCaches(p); syncProgressionInPlace(p, now);
   const validation = validatePayload(p);
   if (validation.errors.length) throw new Error(`Day-close invariant failed: ${validation.errors.join('; ')}`);

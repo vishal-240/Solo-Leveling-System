@@ -1,4 +1,4 @@
-// Real-browser acceptance checks for P6 (rendered layout, focus, reduced motion, axe with colour contrast, SW/offline probe).
+// Real-browser acceptance checks for P6 and P7 (full daily loop, populated screens) (rendered layout, focus, reduced motion, axe with colour contrast, SW/offline probe).
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -27,7 +27,11 @@ const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnima
 /** Layout problems measured in the rendered page. */
 const layoutProblems = async (page: Page) => { await settle(page); return page.evaluate(() => {
   const out: string[] = []; const vw = window.innerWidth; const de = document.documentElement;
-  if (de.scrollWidth > vw + 1) out.push(`horizontal overflow: scrollWidth ${de.scrollWidth} > ${vw}`);
+  window.scrollTo(0, 0);
+  if (de.scrollWidth > vw + 1) {
+    const offenders = [...document.querySelectorAll<HTMLElement>('body *')].filter((e) => e.getBoundingClientRect().right > vw + 1).slice(0, 4).map((e) => `${e.tagName.toLowerCase()}#${e.id}.${String(e.className).slice(0, 20)}`);
+    out.push(`horizontal overflow: scrollWidth ${de.scrollWidth} > ${vw} (${offenders.join(', ')})`);
+  }
   const visible = (e: Element) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 2 && r.height > 2 && s.visibility !== 'hidden' && s.display !== 'none'; };
   const ctl = [...document.querySelectorAll<HTMLElement>('button, a[href], select, input[type=text], input[type=time]')].filter(visible).filter((e) => !e.classList.contains('skip-link'));
   const name = (e: Element) => `${e.tagName.toLowerCase()}[${(e.textContent || (e as HTMLInputElement).id || '').trim().slice(0, 24)}]`;
@@ -39,6 +43,7 @@ const layoutProblems = async (page: Page) => { await settle(page); return page.e
   for (const e of document.querySelectorAll<HTMLElement>('button, h1, h2, h3, p, dt, dd, label, .nav__item, .sysmsg, .badge')) if (visible(e) && e.scrollWidth > e.clientWidth + 1) out.push(`clipped text: ${name(e)} ${e.scrollWidth}>${e.clientWidth}`);
   for (let i = 0; i < ctl.length; i++) for (let j = i + 1; j < ctl.length; j++) {
     const a = ctl[i]!, b = ctl[j]!; if (a.contains(b) || b.contains(a)) continue;
+    if (a.closest('.nav') !== b.closest('.nav') && getComputedStyle((a.closest('.nav') ?? b.closest('.nav'))!).position === 'fixed') continue; // content scrolls under a fixed bottom nav by design (obscuring is checked separately after scrolling into view)
     const x = a.getBoundingClientRect(), y = b.getBoundingClientRect();
     const w = Math.min(x.right, y.right) - Math.max(x.left, y.left), h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
     if (w > 2 && h > 2) out.push(`overlap: ${name(a)} and ${name(b)}`);
@@ -125,5 +130,81 @@ describe('service worker and offline probe (Chromium on localhost only; not an i
     expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     await ctx.setOffline(true); await page.reload();
     await page.getByRole('heading', { name: /^quests$/i }).waitFor({ timeout: 15_000 }); expect(await page.getByText(/Vishal/).first().isVisible()).toBe(true); await ctx.close();
+  });
+});
+
+// ---------------- P7: populated screens and the full daily loop (real domain + persistence in a real browser) ----------------
+/** Test-only clock: the page's Date follows localStorage.__e2e_now (seeded once), so day rollover is deterministic. No application code is involved. */
+const CLOCK_SHIM = `(() => { const R = Date; if (!localStorage.getItem('__e2e_now')) localStorage.setItem('__e2e_now', '2026-10-20T10:00:00.000Z');
+  const read = () => R.parse(localStorage.getItem('__e2e_now'));
+  class F extends R { constructor(...a) { if (a.length === 0) super(read()); else super(...a); } static now() { return read(); } }
+  globalThis.Date = F; })();`;
+async function openClocked(vp: { width: number; height: number }) {
+  const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, timezoneId: 'UTC', locale: 'en-US' });
+  await ctx.addInitScript(CLOCK_SHIM); const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
+}
+async function registerEmpty(page: Page) {
+  await page.getByRole('button', { name: 'Begin' }).click(); await page.getByLabel(/player name/i).fill('Vishal');
+  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: /skip/i }).click();
+  await page.getByRole('button', { name: /confirm registration/i }).click(); await page.getByText('NO QUESTS YET').waitFor();
+  await page.getByRole('button', { name: 'Enter the System' }).click(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+}
+const goto = async (page: Page, dest: string) => { await page.getByRole('navigation', { name: /primary/i }).getByRole('button', { name: dest }).click(); await page.getByRole('heading', { name: new RegExp(`^${dest}$`, 'i'), level: 1 }).waitFor(); };
+const quickCreate = async (page: Page, title: string, difficulty: string) => {
+  await page.getByLabel('Quest title').fill(title); await page.getByLabel('Difficulty').selectOption(difficulty); await page.getByRole('button', { name: /create quest/i }).click();
+  await page.getByText('QUEST CREATED').waitFor();
+};
+const setNow = (page: Page, iso: string) => page.evaluate((v) => { localStorage.setItem('__e2e_now', v); document.dispatchEvent(new Event('visibilitychange')); }, iso);
+const statusLine = async (page: Page) => (await page.getByRole('main').getByText(/Total XP/).textContent()) ?? '';
+
+for (const vp of VIEWPORTS) describe(`populated Quests, Status and Settings at ${vp.name}`, () => {
+  it('no overflow, clipped, overlapping or obscured controls and no serious/critical axe violations (colour contrast on) with real data', async () => {
+    const { ctx, page } = await openClocked(vp); await registerEmpty(page); const problems: string[] = [];
+    await quickCreate(page, 'Read a paper', 'medium');
+    await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Deep work');
+    await page.getByLabel('Type').selectOption('timed'); await page.getByLabel(/^Important/).check(); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText('QUEST CREATED').first().waitFor();
+    await page.getByRole('button', { name: 'Start Deep work' }).click(); await page.getByText('TIMER STARTED').waitFor();
+    await page.getByRole('button', { name: 'Complete Read a paper' }).click(); await page.getByText(/\+100 XP awarded/).first().waitFor();
+    await page.getByRole('button', { name: 'Edit Deep work' }).click(); await page.getByRole('button', { name: /save changes/i }).waitFor();
+    for (const dest of ['Quests', 'Status', 'Settings']) {
+      await goto(page, dest);
+      problems.push(...(await layoutProblems(page)).map((p) => `[${dest}] ${p}`), ...(await axeViolations(page)).map((v) => `[${dest}] axe ${v}`));
+    }
+    expect(problems).toEqual([]); await ctx.close();
+  });
+});
+describe('P7 acceptance: create quest -> complete quest -> level up -> game-day rollover (real browser, production build)', () => {
+  it('runs the whole daily loop against the real domain and persistence layers', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await registerEmpty(page);
+    // honest empty state
+    expect(await page.getByText('NO QUESTS FOR TODAY').isVisible()).toBe(true); expect(await page.getByText(/quests are ready/i).count()).toBe(0);
+    // create: a hard one-off and a mandatory daily recurring quest (advanced form)
+    await quickCreate(page, 'Hard focus', 'hard');
+    await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Daily drill'); await page.getByLabel('Repeat', { exact: true }).check();
+    await page.getByLabel(/^Mandatory/).check(); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText(/"Daily drill" repeats daily/).waitFor();
+    const list = page.getByRole('list', { name: /today's quests/i });
+    expect(await list.getByRole('listitem').count()).toBe(2); expect(await list.getByText('200 XP').count()).toBe(1); expect(await list.getByText('Mandatory').count()).toBe(1);
+    // complete once only: a double click must not award twice
+    await page.getByRole('button', { name: 'Complete Hard focus' }).dblclick(); await page.getByText(/\+200 XP awarded/).first().waitFor();
+    // level up: 200 XP crosses level 2 (50) and level 3 (160) in one award
+    await goto(page, 'Status'); let line = await statusLine(page);
+    expect(line).toMatch(/Level 3/); expect(line).toContain('200'); expect(line).toMatch(/Rank E/);
+    expect((await page.getByText(/Unspent points/).textContent()) ?? '').toContain('2');
+    await goto(page, 'Quests'); await page.getByText('LEVEL UP').first().waitFor(); expect(await page.getByText('LEVEL UP: 3').count()).toBeGreaterThan(0);
+    // reload preserves the state and never re-awards
+    await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await goto(page, 'Status'); expect(await statusLine(page)).toMatch(/Total XP[^0-9]*200\b/);
+    await goto(page, 'Quests'); expect(await page.getByRole('list', { name: /today's quests/i }).getByText('Completed').count()).toBe(1);
+    // game-day rollover: the mandatory quest was missed on day 1 (13 XP deduction, floored at the level start), day 2 is generated
+    await setNow(page, '2026-10-21T10:00:00.000Z'); await page.getByText("Today's quests (2026-10-21)").waitFor();
+    expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('listitem').count()).toBe(1);
+    expect(await page.getByRole('button', { name: 'Complete Daily drill' }).isVisible()).toBe(true);
+    await goto(page, 'Status'); line = await statusLine(page); expect(line).toMatch(/Level 3/); expect(line).toContain('187');
+    // reload after rollover: idempotent (no second deduction, no duplicate occurrence)
+    await page.reload(); await page.getByRole('heading', { name: /^status$/i, level: 1 }).or(page.getByRole('heading', { name: /^quests$/i, level: 1 })).waitFor();
+    await goto(page, 'Status'); expect(await statusLine(page)).toContain('187'); await goto(page, 'Quests');
+    expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('listitem').count()).toBe(1);
+    // completing today's quest the next day works and adds exactly its XP
+    await page.getByRole('button', { name: 'Complete Daily drill' }).click(); await page.getByText(/\+50 XP awarded/).first().waitFor(); await goto(page, 'Status'); expect(await statusLine(page)).toContain('237');
+    await ctx.close();
   });
 });
