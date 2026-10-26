@@ -28,7 +28,7 @@ a,button,input,select,textarea{font:inherit}
 .btn{background:transparent;color:var(--text);border:1px solid var(--edge);padding:var(--s2) var(--s4);min-height:44px;min-width:44px;cursor:pointer;letter-spacing:.08em;text-transform:uppercase;border-radius:var(--radius)}
 .btn:hover{background:rgba(47,208,255,.12)} .btn--primary{background:var(--accent);color:var(--accent-ink);font-weight:700} .btn--primary:hover{background:#6fe0ff}
 .btn[disabled]{opacity:.55;cursor:not-allowed}
-.field{display:grid;gap:var(--s1);margin:0 0 var(--s4)} .field label,.field legend{color:var(--text);font-weight:600}
+.field{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s1);margin:0 0 var(--s4)} .field input[type=file],.field input[type=date]{max-width:100%;width:100%;min-width:0} .field label,.field legend{color:var(--text);font-weight:600}
 .field input[type=text],.field input[type=time],.field select{background:var(--bg);color:var(--text);border:1px solid var(--edge-dim);padding:var(--s2) var(--s3);min-height:44px;border-radius:var(--radius);width:100%}
 .hint{color:var(--text-muted);font-size:.9rem} .error{color:var(--danger);font-weight:600}
 .checks{display:grid;gap:var(--s2);border:0;padding:0;margin:0} .check{display:flex;gap:var(--s3);align-items:center;min-height:44px}

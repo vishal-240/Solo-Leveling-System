@@ -2,7 +2,7 @@
 
 Implements the approved **Solo Leveling System PWA Specification v1.0 (FROZEN)**. Product rules and numeric values are frozen; implementation must not change them without an explicit change request.
 
-**Current implementation status: P0–P6 are implemented and the P6 acceptance checks have been run, including real-browser checks (headless Chromium 131). P7–P10 are not started.** The Quests, Status and Settings screens are still placeholders (P7); History is planned for P8. This is not yet the finished application.
+**Current implementation status: P0–P7 are implemented and tested, including a real-browser (headless Chromium 131) end-to-end test of create quest → complete quest → level up → game-day rollover. History (P8), audio/cinematics (P9) and release hardening (P10) are not started.** The Quests, Status and Settings screens are working; the History screen is still a labelled placeholder. This is not yet the finished application.
 
 ## Run locally
 
@@ -25,18 +25,20 @@ npm run test:browser   # real-browser suite (builds first); needs a Chromium
 
 ## Latest verification
 
-Checkpoint: branch `p6-browser-verification` (built on `p6-visual-onboarding`, commit `ba3ed34`). Results from a clean extraction of the delivered ZIP:
+Checkpoint: branch `p7-core-screens`, built from the P6 browser-verification checkpoint supplied as `Solo-Leveling-System-main_1.zip` (no Git history was included, so a local baseline commit was created; the remote was not fetched or updated). Results from a clean extraction of the delivered ZIP:
 
-- `npm test`: **204/204 tests passed** (unit, domain, persistence and jsdom + axe).
-- `npm run test:browser`: **8/8 real-browser tests passed** (headless Chromium 131 on Linux, against the production build).
+- `npm ci`: succeeded.
+- `npm run typecheck`: passed.
+- `npm test`: **216/216 tests passed** (domain, persistence, jsdom screens + axe).
+- `npm run test:browser`: **11/11 real-browser tests passed** (headless Chromium 131, production build, includes the P7 full daily loop).
 - `npm run build`: successful.
-- `npm audit`: 7 reported development-tooling vulnerabilities (4 moderate, 1 high, 2 critical), unchanged; `npm audit --omit=dev`: 0.
+- `npm audit`: 7 reported development-tooling vulnerabilities (4 moderate, 1 high, 2 critical), unchanged; `npm audit --omit=dev`: 0 vulnerabilities.
 
 Do **not** use `npm audit fix --force` without reviewing breaking-version upgrades. The dev findings come from vitest/tinypool and the vite/esbuild dev server; clearing them needs a coordinated major upgrade (vitest 4 requires vite 6+, which requires newer vite-plugin-pwa and the React plugin).
 
-**Verified in a real browser (Chromium 131 only):** rendered layouts at 360 px and 1440 px for every onboarding step, the confirmation and all four shell destinations (no horizontal overflow, clipped text, overlapping or obscured controls, 44 px targets, bottom navigation never covering content, left rail never overlapping content); axe with colour-contrast enabled (no serious/critical violations); keyboard focus order, visible 3 px focus outline and focus moving to the new step heading; `prefers-reduced-motion`; and a probe that the service worker registers and a registered player can reload offline on localhost.
+**Verified in a real browser (Chromium 131 only):** rendered layouts at 360 px and 1440 px for every onboarding step, the confirmation, all four shell destinations, and the Quests, Status and Settings screens populated with real data (no horizontal overflow, clipped text, overlapping or obscured controls, 44 px targets); axe with colour contrast enabled (no serious/critical violations); keyboard focus; `prefers-reduced-motion`; a service-worker/offline-reload probe on localhost; and the full daily loop (create a one-off and a mandatory recurring quest, double-click completion awards exactly once, level 1 → 3 with System messages and 2 unspent points, reload preserves state, game-day rollover with the day-1 miss deducting 13 XP exactly once and day-2 occurrence generated, reload after rollover is idempotent, next-day completion adds exactly its XP). Rollover is driven by a test-only Date shim installed by the test, not by application code.
 
-**Still unverified:** Firefox, Safari/WebKit and mobile browsers; real devices; PWA installation on Windows/Android/iOS; device lock/background throttling; offline use beyond the localhost probe; and deployment of this P6 branch. The existing `main`/P5 checkpoint has deployed successfully (GitHub Actions Deploy #6) and the site loads, but it still shows the older shell stating Player Awakening is not yet implemented. Verify the live site again after P6 is merged.
+**Still unverified:** Firefox, Safari/WebKit and mobile browsers; real devices; PWA installation on Windows/Android/iOS; device lock/background throttling; offline use beyond the localhost probe; the real-time timer over a full 15-minute block in a browser (block maths are covered by the fake-clock unit tests); and the GitHub Pages deployment.
 
 ## Implementation by phase
 
@@ -45,7 +47,7 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 - Vite + React + strict TypeScript project scaffold.
 - PWA manifest, service-worker generation and install-related configuration.
 - Production build and GitHub Actions deployment workflow, configured to support a repository subpath through `BASE_PATH`.
-- GitHub Actions Deploy #6 succeeded for the existing `main`/P5 checkpoint, and the GitHub Pages site loads. That deployed page still shows the older shell stating Player Awakening is not yet implemented; this P6 branch has not yet been deployed. Recheck Pages after P6 is merged.
+- GitHub Actions Deploy #6 succeeded for the earlier `main`/P5 checkpoint. The P6 Player Awakening shell was subsequently confirmed visually on GitHub Pages. This P7 checkpoint has not yet been deployed; verify the site again after P7 is merged.
 
 ### P1 — Progression engine
 
@@ -89,6 +91,14 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 - Automated jsdom + axe-core tests cover onboarding flows, keyboard navigation, System-message roles and serious/critical axe violations; CSS-token contrast is computed in tests.
 - A real-browser suite (`tests/browser/browser.test.ts`, Playwright + Chromium) renders the app at 360 px and 1440 px and checks layout, focus, reduced motion and axe with colour contrast. It found and fixed one genuine defect: at 360 px the four-item bottom navigation overflowed the viewport (the Settings button extended past the right edge); the navigation items now shrink to fit. Other browsers, installation, real-device and deployment checks remain unverified (see above).
 
+### P7 — Core screens
+
+- **Quests:** today's occurrences with state, difficulty/timed type, category, expected and awarded XP, mandatory/important/penalty/one-off badges; honest empty state; quick creation (one-off today, or repeating daily) and advanced creation (timed or standard, daily / selected weekdays / weekly / every N days, mandatory, important, deadline time, one-off deadline date); editing through versioned templates (applies from tomorrow, today's occurrence unchanged); pause, resume and remove (from tomorrow); complete, skip (with confirmation and miss warning) and 2-minute undo (hidden with an explanation when it would remove a level already reached); timer start/pause/resume, elapsed active time, completed blocks, 10-minute gap honesty prompt, bank partial, confirmed completion. Duplicate clicks are ignored while an action runs, and success is only shown after the domain call succeeds.
+- **Status:** ledger-derived rank, level, XP progress, streaks, shields (with D17 queue), five attributes with levels/progress/stat points, an accessible radar chart, unspent points, Manual/Balanced/Momentum modes, per-attribute allocation, bank distribution, weekly respec, titles/badges/frames/cosmetics with equip, and achievements (hidden ones stay hidden until unlocked).
+- **Settings:** profile, timezone and reset time (effective from the next game day), protected rest days (domain quota and declare-ahead rules surface as errors), allocation mode, effects tier and music preference (stored only; no audio yet), fixed rules, backup export (downloads a JSON file and records the export time) and import (explicit replace confirmation; invalid files change nothing), and version/schema information.
+- **Day close** now also runs when the app is opened, when the tab becomes visible and every 30 seconds; System-message text reflects the real number of quests.
+- **History** remains a clearly labelled placeholder (P8).
+
 ## Phase status
 
 | Phase | Status | Scope |
@@ -100,7 +110,7 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 | P4 Timer | Done | Sessions, gap prompt, banking, completion, undo |
 | P5 Consequences and rewards | Done | Deductions, penalties, streaks, shields, rewards, achievements |
 | P6 Visual system and onboarding | Done; browser-verified in Chromium only | Tokens, components, shell, Player Awakening |
-| P7 Core screens | Not started | Quests, Status and Settings screens; timer UI; full daily workflow |
+| P7 Core screens | Done; browser-verified in Chromium only | Quests, Status and Settings screens; timer UI; full daily workflow |
 | P8 History and analytics | Not started | Calendar, ledger views, charts, System log |
 | P9 Audio and cinematics | Not started | UI sounds, optional music, level-up/rank cinematics, effects tiers |
 | P10 Release hardening | Not started | Backup reminders, storage status, offline/device matrix, full acceptance |
@@ -109,8 +119,8 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 
 - A completion undo that would decrease the player's level is rejected as `UNDO_BLOCKED`, preserving the frozen rule that levels/ranks never decrease. See `docs/IMPLEMENTATION_NOTES.md`.
 - Achievements are an implementation-defined catalogue because the specification requires visible and hidden achievements but does not prescribe their names; the current catalogue has 16 visible and 5 hidden.
-- The current UI includes a visual shell and Player Awakening, but full Quests, Status and Settings screens are not implemented yet.
-- Rendered layout, focus, reduced motion and axe were verified in headless Chromium 131 only. Other browsers, installability on Windows/Android/iOS, real offline use beyond a localhost probe and actual device-lock behavior remain unverified. The main/P5 deployment succeeded, but P6 is not yet confirmed live; the current site still shows the older placeholder shell.
+- Quests, Status and Settings are implemented (P7); History, audio/cinematics, backup reminders and storage status are not (P8–P10). See `docs/IMPLEMENTATION_NOTES.md` for P7 decisions.
+- Rendered layout, focus, reduced motion and axe were verified in headless Chromium 131 only. Other browsers, installability on Windows/Android/iOS, real offline use beyond a localhost probe and actual device-lock behavior remain unverified. P6 was confirmed visually on GitHub Pages; the P7 checkpoint itself has not yet been deployed.
 
 ## Deployment
 

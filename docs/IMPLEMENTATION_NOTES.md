@@ -47,4 +47,20 @@ A Chromium 131 binary was obtained from the npm package `@sparticuz/chromium` (P
 navigation versus content geometry, axe with colour contrast enabled, keyboard focus order/visibility/outline, focus moving to the step heading, reduced motion, and a service-worker/offline-reload probe.
 **Defect found and fixed:** the four-item bottom navigation overflowed a 360 px viewport. Tests wait for entry animations to finish before measuring (a fading panel has partial opacity and fails contrast otherwise).
 ### Still not verified
-Firefox/WebKit/mobile browsers, real devices, PWA installation, device lock and offline beyond the localhost probe. The existing main/P5 checkpoint is deployed, but this P6 branch has not yet been deployed; the live site still shows the older placeholder shell.
+Firefox/WebKit/mobile browsers, real devices, PWA installation, device lock and offline beyond the localhost probe. P6 was subsequently confirmed visually on GitHub Pages; this P7 checkpoint has not yet been deployed.
+
+## P7 - Core screens (branch `p7-core-screens`)
+Built from the supplied P6 checkpoint (no Git history in the ZIP; a local baseline commit was created and the remote was not touched). Screens live in `src/screens/*`, the thin atomic action layer in `src/app/actions.ts`,
+ledger-derived read models in `src/app/selectors.ts`; business rules stay in the existing domain/timer/rewards/persistence modules.
+Decisions where the spec is silent:
+- **Quick create** makes a one-off for today (or a daily recurring quest with "Repeat"). **Timed quests must repeat**, because the existing one-off model supports difficulty only; the form says so.
+- **Edit, pause, resume and remove take effect from tomorrow** (effective-dated template versions), so today's generated occurrence is never rewritten; the UI states this.
+- **Undo** is offered for 2 minutes after completion but hidden, with an explanation, when reversing it would remove a level already reached (the P5 `UNDO_BLOCKED` rule). The player's first-ever completion reaches level 2 at 50 XP, so it cannot be undone.
+- **Timer UI** derives elapsed time from stored timestamps on a 1 s render tick and sends a keep-alive heartbeat every 15 s while a timer runs; the gap prompt takes whole minutes (0 to the gap). Actions use click-time timestamps.
+- **Export** downloads `system-backup-YYYY-MM-DD.json` and records `meta.lastExportAt`; **import** requires ticking an explicit replace confirmation, uses the existing validated/atomic importer and keeps its snapshot.
+- **Settings**: timezone/reset changes use the existing effective-dated policy (next game day); effects and the music preference are stored but no audio exists until P9; "timer behavior" and "penalty strictness" are shown as fixed rules.
+- **Day close** runs on open, on tab visibility and every 30 s; its System message now states the real quest count ("no quests are scheduled" when there are none); the onboarding confirmation says "NO QUESTS YET" when none were created.
+- **Test clock:** the end-to-end rollover test installs a Date shim from the test (localStorage-backed); no clock override exists in production code.
+- **Accessibility fix found by tests:** schedule buttons are named "Pause schedule of X" so they cannot be confused with the timer's "Pause X".
+Real-browser defects found and fixed in P7: the Settings page overflowed a 360 px viewport (file input intrinsic width). The overlap check ignores content scrolling beneath the fixed bottom navigation (checked separately by the obscured-control test).
+Known limitations: History is a placeholder; no audio or cinematics; real-time 15-minute timer blocks are unit-tested with a fake clock but not waited out in a browser; Chromium-only browser evidence; installability, devices and Pages deployment unverified.
