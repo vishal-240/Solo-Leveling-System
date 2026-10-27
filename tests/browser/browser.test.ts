@@ -195,7 +195,7 @@ describe('P7 acceptance: create quest -> complete quest -> level up -> game-day 
     await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await goto(page, 'Status'); expect(await statusLine(page)).toMatch(/Total XP[^0-9]*200\b/);
     await goto(page, 'Quests'); expect(await page.getByRole('list', { name: /today's quests/i }).getByText('Completed').count()).toBe(1);
     // game-day rollover: the mandatory quest was missed on day 1 (13 XP deduction, floored at the level start), day 2 is generated
-    await setNow(page, '2026-10-21T10:00:00.000Z'); await page.getByText("Today's quests (2026-10-21)").waitFor();
+    await setNow(page, '2026-10-21T10:00:00.000Z'); await page.getByText("Today's quests (2026-10-21)").waitFor(); await page.getByRole('button', { name: 'Complete Daily drill' }).waitFor();
     expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('listitem').count()).toBe(1);
     expect(await page.getByRole('button', { name: 'Complete Daily drill' }).isVisible()).toBe(true);
     await goto(page, 'Status'); line = await statusLine(page); expect(line).toMatch(/Level 3/); expect(line).toContain('187');
@@ -205,6 +205,55 @@ describe('P7 acceptance: create quest -> complete quest -> level up -> game-day 
     expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('listitem').count()).toBe(1);
     // completing today's quest the next day works and adds exactly its XP
     await page.getByRole('button', { name: 'Complete Daily drill' }).click(); await page.getByText(/\+50 XP awarded/).first().waitFor(); await goto(page, 'Status'); expect(await statusLine(page)).toContain('237');
+    await ctx.close();
+  });
+});
+
+// ---------------- P8: History screen in a real browser ----------------
+const HISTORY_VIEWS = ['Calendar', 'Charts', 'XP ledger', 'System log', 'Achievements'];
+async function twoGameDays(page: Page) {
+  await registerEmpty(page); await quickCreate(page, 'Hard focus', 'hard');
+  await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Daily drill'); await page.getByLabel('Repeat', { exact: true }).check();
+  await page.getByLabel(/^Mandatory/).check(); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText(/"Daily drill" repeats daily/).waitFor();
+  await page.getByRole('button', { name: 'Complete Hard focus' }).click(); await page.getByText(/\+200 XP awarded/).first().waitFor();
+  await setNow(page, '2026-10-21T10:00:00.000Z'); await page.getByText("Today's quests (2026-10-21)").waitFor();
+  await page.getByRole('button', { name: 'Complete Daily drill' }).waitFor(); // day close for day 1 has finished once day 2's quest exists
+}
+for (const vp of VIEWPORTS) describe(`History screen at ${vp.name}`, () => {
+  it('every view has no overflow, clipping, overlap or obscured controls and no serious/critical axe violations (colour contrast on)', async () => {
+    const { ctx, page } = await openClocked(vp); await twoGameDays(page); await goto(page, 'History'); const problems: string[] = [];
+    for (const v of HISTORY_VIEWS) {
+      await page.getByRole('group', { name: /history views/i }).getByRole('button', { name: v }).click();
+      await page.getByRole('button', { name: v, pressed: true }).waitFor();
+      problems.push(...(await layoutProblems(page)).map((p) => `[${v}] ${p}`), ...(await axeViolations(page)).map((x) => `[${v}] axe ${x}`));
+    }
+    expect(problems).toEqual([]); await ctx.close();
+  });
+  it('calendar, day detail, filters and keyboard operation work on real recorded days', async () => {
+    const { ctx, page } = await openClocked(vp); await twoGameDays(page); await goto(page, 'History');
+    const cal = page.getByRole('table', { name: /october 2026/i });
+    await cal.getByRole('button', { name: /^20 October 2026:/ }).waitFor(); expect(await cal.getByRole('button', { name: /^20 October 2026:/ }).getAttribute('aria-label')).toMatch(/Some completed, some missed, 1 completed, 1 missed, net \+187 XP$|net \+187 XP|net \+/);
+    expect(await cal.getByRole('button', { name: /^21 October 2026:/ }).getAttribute('aria-current')).toBe('date'); expect(await cal.getByRole('button', { name: /^22 October 2026:/ }).isDisabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'Previous month' }).isDisabled()).toBe(true); expect(await page.getByRole('button', { name: 'Next month' }).isDisabled()).toBe(true);
+    // keyboard: focus a day, select with Enter, focus ring stays visible on the selected day
+    const day = cal.getByRole('button', { name: /^20 October 2026:/ }); await day.focus(); await page.keyboard.press('Enter');
+    await page.getByRole('heading', { name: 'Day 2026-10-20' }).waitFor(); expect(await day.getAttribute('aria-pressed')).toBe('true');
+    const ring = await day.evaluate((e) => { const s = getComputedStyle(e); return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) }; }); expect(ring.style).not.toBe('none'); expect(ring.width).toBeGreaterThanOrEqual(3);
+    const detail = page.getByRole('heading', { name: 'Day 2026-10-20' }).locator('xpath=ancestor::section[1]'); expect(await detail.textContent()).toMatch(/Some completed, some missed/); expect(await detail.textContent()).toMatch(/deducted 13/);
+    // ledger filter
+    await page.getByRole('button', { name: 'XP ledger' }).click(); await page.getByLabel('Kind').selectOption('penalty_deduction');
+    const rows = page.getByRole('table', { name: /xp ledger entries/i }).locator('tbody tr'); expect(await rows.count()).toBe(2); expect(await rows.first().textContent()).toMatch(/Penalty deduction/);
+    await page.getByLabel('Kind').selectOption(''); await page.getByLabel(/only the selected day/i).check(); expect(await rows.count()).toBeGreaterThan(0);
+    for (let i = 0; i < await rows.count(); i++) expect(await rows.nth(i).textContent()).toContain('2026-10-20');
+    // system log filter
+    await page.getByRole('button', { name: 'System log' }).click(); await page.getByLabel('Category').selectOption('Penalties');
+    const items = page.getByRole('list', { name: /system events/i }).getByRole('listitem'); expect(await items.count()).toBe(1); expect(await items.first().textContent()).toMatch(/XP DEDUCTED/);
+    await page.getByLabel('Category').selectOption('Progression'); expect(await items.count()).toBe(2);
+    // charts: accessible chart plus a data table whose total matches the ledger
+    await page.getByRole('button', { name: 'Charts' }).click(); await page.getByRole('img', { name: /weekly net xp/i }).waitFor(); expect(await page.getByText(/equals your ledger total/i).isVisible()).toBe(true);
+    expect(await page.getByRole('table', { name: /weekly xp data/i }).locator('tbody tr').count()).toBe(1);
+    // reload keeps the history
+    await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await goto(page, 'History'); await cal.getByRole('button', { name: /^20 October 2026:/ }).waitFor();
     await ctx.close();
   });
 });

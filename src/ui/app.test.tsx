@@ -111,6 +111,6 @@ describe('application shell', () => {
     const nav = screen.getByRole('navigation', { name: /primary/i }); expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['Quests', 'Status', 'History', 'Settings']);
     for (let i = 0; i < 6 && document.activeElement !== within(nav).getByRole('button', { name: 'History' }); i++) await user.tab();
     await user.keyboard('{Enter}'); expect(await heading(/^history$/i)).toBeTruthy(); expect(within(nav).getByRole('button', { name: 'History' }).getAttribute('aria-current')).toBe('page');
-    expect(screen.getByText(/do not exist yet/i).textContent).toMatch(/P8/);
+    expect(screen.getByRole('group', { name: /history views/i })).toBeTruthy(); expect(screen.getByRole('table', { name: /october|november|december|january|february|march|april|may|june|july|august|september/i })).toBeTruthy();
   });
 });
