@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { playerView } from './app/selectors';
 import { runDayClose } from './app/actions';
+import { HistoryScreen } from './screens/HistoryScreen';
 import { QuestsScreen } from './screens/QuestsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { StatusScreen } from './screens/StatusScreen';
@@ -42,7 +43,7 @@ export function App({ db }: { db: SlsDb }) {
       {dest === 'quests' && <QuestsScreen {...props} />}
       {dest === 'status' && <StatusScreen {...props} />}
       {dest === 'settings' && <SettingsScreen {...props} />}
-      {dest === 'history' && <Panel title="Screen status"><p><span className="badge">Not yet implemented</span></p><p className="hint">History and analytics are part of phase {current.phase} and do not exist yet.</p></Panel>}
+      {dest === 'history' && <HistoryScreen {...props} />}
     </Shell>
   );
 }

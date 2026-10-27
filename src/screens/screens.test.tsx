@@ -118,8 +118,8 @@ describe('Settings screen', () => {
   });
 });
 describe('Navigation', () => {
-  it('keeps exactly four destinations and marks History as not implemented', async () => {
+  it('keeps exactly four destinations and shows the real History screen', async () => {
     await boot(); const n = screen.getByRole('navigation', { name: /primary/i }); expect(within(n).getAllByRole('button').map((b) => b.textContent)).toEqual(['Quests', 'Status', 'History', 'Settings']);
-    await nav('History'); expect(screen.getByText(/not yet implemented/i)).toBeTruthy(); await waitFor(() => expect(screen.getByText(/do not exist yet/i)).toBeTruthy());
+    await nav('History'); expect(screen.queryByText(/not yet implemented/i)).toBeNull(); await waitFor(() => expect(screen.getByRole('group', { name: /history views/i })).toBeTruthy());
   });
 });
