@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { audio, applyMusicSource, installAudioLifecycle, prefsFromSettings } from './audio';
+import { CinematicHost } from './cinematics/CinematicHost';
+import { effectiveTier } from './cinematics/model';
 import { playerView } from './app/selectors';
 import { runDayClose } from './app/actions';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -30,7 +33,15 @@ export function App({ db }: { db: SlsDb }) {
     if (!ready) return; const i = setInterval(() => void sync(), 30_000); const v = () => { if (document.visibilityState === 'visible') void sync(); };
     document.addEventListener('visibilitychange', v); return () => { clearInterval(i); document.removeEventListener('visibilitychange', v); };
   }, [ready, sync]);
-  useEffect(() => { if (state.kind === 'ready') document.documentElement.dataset.effects = String(state.payload.settings.effects ?? 'full'); }, [state]);
+  useEffect(() => installAudioLifecycle(), []);
+  const settings = state.kind === 'ready' ? state.payload.settings : null;
+  const prefersReduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const tier = effectiveTier(settings ?? {}, prefersReduced);
+  const audioKey = JSON.stringify((settings?.audio ?? {}) as object);
+  useEffect(() => { if (state.kind === 'ready') document.documentElement.dataset.effects = tier; }, [state.kind, tier]);
+  useEffect(() => { if (settings) audio.configure(prefsFromSettings(settings)); }, [audioKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const musicSource = (settings?.audio as { musicSource?: string } | undefined)?.musicSource;
+  useEffect(() => { if (state.kind === 'ready') void applyMusicSource(musicSource); }, [state.kind, musicSource]);
 
   if (state.kind === 'loading') return <p role="status" className="shell__main">Loading</p>;
   if (state.kind === 'error') return <main className="shell__main"><h1>System</h1><SystemMessage title="STORAGE ERROR" kind="penalty">{state.message}</SystemMessage></main>;
@@ -38,7 +49,8 @@ export function App({ db }: { db: SlsDb }) {
   const p = state.payload; const pv = playerView(p); const current = DESTINATIONS.find((d) => d.id === dest)!;
   const props = { db, payload: p, refresh: load };
   return (
-    <Shell player={`${pv.name} | Rank ${pv.rank} | Level ${pv.level}`} nav={<Nav current={dest} onNavigate={setDest} />}>
+    <Shell player={<>{`${pv.name} | Rank ${pv.rank} | Level ${pv.level}`} <MusicToggle allowed={prefsFromSettings(p.settings).musicEnabled} /></>} nav={<Nav current={dest} onNavigate={setDest} />}>
+      <CinematicHost db={db} payload={p} refresh={load} tier={tier} />
       <h1>{current.label}</h1>
       {dest === 'quests' && <QuestsScreen {...props} />}
       {dest === 'status' && <StatusScreen {...props} />}
@@ -46,4 +58,12 @@ export function App({ db }: { db: SlsDb }) {
       {dest === 'history' && <HistoryScreen {...props} />}
     </Shell>
   );
+}
+
+/** Starts or stops ambient music. Music never starts by itself: it needs this button (a user gesture) each session, and only when music is allowed in Settings. */
+function MusicToggle({ allowed }: { allowed: boolean }) {
+  const [playing, setPlaying] = useState(audio.musicPlaying);
+  useEffect(() => audio.subscribe(() => setPlaying(audio.musicPlaying)), []);
+  if (!allowed) return null;
+  return <button type="button" className="btn" aria-pressed={playing} data-silent="true" onClick={() => { audio.unlock(); if (playing) audio.stopMusic(); else audio.startMusic(); setPlaying(audio.musicPlaying); }}>{playing ? 'Stop music' : 'Play music'}</button>;
 }

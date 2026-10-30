@@ -192,6 +192,15 @@ describe('references, invariants, ledger and caches', () => {
     expect(r.ok && r.value.payload.attributes[0]).toMatchObject({ xpTotal: 100, level: 2 });
   });
 });
+describe('regression: multi-level events with one timestamp', () => {
+  it('does not treat storage order (level:10 before level:2) as a level decrease, and survives a database round trip', async () => {
+    const p = sample(); const same = '2026-10-24T10:00:00.000Z'; p.levelEvents = [9, 10, 11, 2, 3].map((l) => ({ id: `level:${l}`, level: l, at: same }));
+    expect(B.validatePayload(p).errors).toEqual([]);
+    const db2 = new S.SlsDb(`lv-${Math.random()}`); await db2.open(); await S.replaceAll(db2, p); const back = await S.loadPayload(db2); expect(back.levelEvents.map((e) => e.id)[0]).toBe('level:10'); // stored order is textual
+    expect(B.validatePayload(back).errors).toEqual([]);
+    const bad = sample(); bad.levelEvents = [{ id: 'level:5', level: 5, at: '2026-10-02T00:00:00Z' }, { id: 'level:4', level: 4, at: '2026-10-03T00:00:00Z' }]; expect(B.validatePayload(bad).errors.join()).toMatch(/level decreased/); // genuine decreases are still caught
+  });
+});
 describe('migrations', () => {
   it('runs each step in order and fails loudly when one is missing', () => {
     const t: B.Migrations = { 3: (p) => ({ ...p, meta: { ...p.meta, a: 1 } }), 4: (p) => ({ ...p, meta: { ...p.meta, b: (p.meta.a as number) + 1 } }) };

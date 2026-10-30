@@ -23,7 +23,7 @@ async function open(vp: { width: number; height: number }, opts: { reducedMotion
   const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
 }
 /** Wait for entry animations to finish so measurements and contrast are taken at rest (a fading panel has partial opacity). */
-const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))).then(() => undefined));
+const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime))).map((a) => a.finished.catch(() => undefined))).then(() => undefined)); // infinite decorative loops never finish
 /** Layout problems measured in the rendered page. */
 const layoutProblems = async (page: Page) => { await settle(page); return page.evaluate(() => {
   const out: string[] = []; const vw = window.innerWidth; const de = document.documentElement;
@@ -139,8 +139,8 @@ const CLOCK_SHIM = `(() => { const R = Date; if (!localStorage.getItem('__e2e_no
   const read = () => R.parse(localStorage.getItem('__e2e_now'));
   class F extends R { constructor(...a) { if (a.length === 0) super(read()); else super(...a); } static now() { return read(); } }
   globalThis.Date = F; })();`;
-async function openClocked(vp: { width: number; height: number }) {
-  const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, timezoneId: 'UTC', locale: 'en-US' });
+async function openClocked(vp: { width: number; height: number }, opts: { reducedMotion?: 'reduce' | 'no-preference' } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, timezoneId: 'UTC', locale: 'en-US', reducedMotion: opts.reducedMotion ?? 'no-preference' });
   await ctx.addInitScript(CLOCK_SHIM); const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
 }
 async function registerEmpty(page: Page) {
@@ -149,6 +149,8 @@ async function registerEmpty(page: Page) {
   await page.getByRole('button', { name: /confirm registration/i }).click(); await page.getByText('NO QUESTS YET').waitFor();
   await page.getByRole('button', { name: 'Enter the System' }).click(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
 }
+/** Level-ups open a modal dialog (P9); flows that are not about it dismiss it with Skip. */
+const dismissCinematic = async (page: Page) => { const d = page.getByRole('dialog'); await d.waitFor(); await d.getByRole('button', { name: 'Skip' }).click(); await d.waitFor({ state: 'detached' }); };
 const goto = async (page: Page, dest: string) => { await page.getByRole('navigation', { name: /primary/i }).getByRole('button', { name: dest }).click(); await page.getByRole('heading', { name: new RegExp(`^${dest}$`, 'i'), level: 1 }).waitFor(); };
 const quickCreate = async (page: Page, title: string, difficulty: string) => {
   await page.getByLabel('Quest title').fill(title); await page.getByLabel('Difficulty').selectOption(difficulty); await page.getByRole('button', { name: /create quest/i }).click();
@@ -164,7 +166,7 @@ for (const vp of VIEWPORTS) describe(`populated Quests, Status and Settings at $
     await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Deep work');
     await page.getByLabel('Type').selectOption('timed'); await page.getByLabel(/^Important/).check(); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText('QUEST CREATED').first().waitFor();
     await page.getByRole('button', { name: 'Start Deep work' }).click(); await page.getByText('TIMER STARTED').waitFor();
-    await page.getByRole('button', { name: 'Complete Read a paper' }).click(); await page.getByText(/\+100 XP awarded/).first().waitFor();
+    await page.getByRole('button', { name: 'Complete Read a paper' }).click(); await page.getByText(/\+100 XP awarded/).first().waitFor(); await dismissCinematic(page);
     await page.getByRole('button', { name: 'Edit Deep work' }).click(); await page.getByRole('button', { name: /save changes/i }).waitFor();
     for (const dest of ['Quests', 'Status', 'Settings']) {
       await goto(page, dest);
@@ -186,6 +188,7 @@ describe('P7 acceptance: create quest -> complete quest -> level up -> game-day 
     expect(await list.getByRole('listitem').count()).toBe(2); expect(await list.getByText('200 XP').count()).toBe(1); expect(await list.getByText('Mandatory').count()).toBe(1);
     // complete once only: a double click must not award twice
     await page.getByRole('button', { name: 'Complete Hard focus' }).dblclick(); await page.getByText(/\+200 XP awarded/).first().waitFor();
+    const cine = page.getByRole('dialog'); await cine.waitFor(); expect(await cine.getByRole('heading').textContent()).toBe('LEVEL UP'); expect(await cine.textContent()).toMatch(/Levels 2 to 3 \(2 levels\)/); await dismissCinematic(page);
     // level up: 200 XP crosses level 2 (50) and level 3 (160) in one award
     await goto(page, 'Status'); let line = await statusLine(page);
     expect(line).toMatch(/Level 3/); expect(line).toContain('200'); expect(line).toMatch(/Rank E/);
@@ -215,7 +218,7 @@ async function twoGameDays(page: Page) {
   await registerEmpty(page); await quickCreate(page, 'Hard focus', 'hard');
   await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Daily drill'); await page.getByLabel('Repeat', { exact: true }).check();
   await page.getByLabel(/^Mandatory/).check(); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText(/"Daily drill" repeats daily/).waitFor();
-  await page.getByRole('button', { name: 'Complete Hard focus' }).click(); await page.getByText(/\+200 XP awarded/).first().waitFor();
+  await page.getByRole('button', { name: 'Complete Hard focus' }).click(); await page.getByText(/\+200 XP awarded/).first().waitFor(); await dismissCinematic(page);
   await setNow(page, '2026-10-21T10:00:00.000Z'); await page.getByText("Today's quests (2026-10-21)").waitFor();
   await page.getByRole('button', { name: 'Complete Daily drill' }).waitFor(); // day close for day 1 has finished once day 2's quest exists
 }
@@ -255,5 +258,66 @@ for (const vp of VIEWPORTS) describe(`History screen at ${vp.name}`, () => {
     // reload keeps the history
     await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await goto(page, 'History'); await cal.getByRole('button', { name: /^20 October 2026:/ }).waitFor();
     await ctx.close();
+  });
+});
+
+// ---------------- P9: audio and cinematics in a real browser ----------------
+/** Test-only instrumentation: counts AudioContext constructions and oscillator starts so autoplay can be checked. Sound output itself cannot be heard here. */
+const AUDIO_SPY = `(() => { const w = window; w.__audio = { created: 0, started: 0 }; const Real = w.AudioContext; if (!Real) return;
+  w.AudioContext = class extends Real { constructor(...a) { super(...a); w.__audio.created++; } };
+  const st = w.OscillatorNode.prototype.start; w.OscillatorNode.prototype.start = function (...a) { w.__audio.started++; return st.apply(this, a); }; })();`;
+const counters = (page: Page) => page.evaluate(() => (window as unknown as { __audio: { created: number; started: number } }).__audio);
+describe('audio autoplay and music control (instrumented Web Audio; no acoustic verification)', () => {
+  it('creates no audio context and starts no sound before a gesture, plays cues after one, and never starts music by itself', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'UTC' }); await ctx.addInitScript(AUDIO_SPY);
+    const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); await page.waitForTimeout(1200);
+    expect(await counters(page)).toEqual({ created: 0, started: 0 });
+    await page.getByRole('button', { name: 'Begin' }).click(); const afterClick = await counters(page); expect(afterClick.created).toBe(1); expect(afterClick.started).toBeGreaterThan(0);
+    await page.getByLabel(/player name/i).fill('Vishal'); for (let i = 0; i < 5; i++) await page.getByRole('button', { name: /skip/i }).click(); await page.getByRole('button', { name: /confirm registration/i }).click();
+    await page.getByRole('button', { name: 'Enter the System' }).click(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+    expect(await page.getByRole('banner').getByRole('button', { name: /music/i }).count()).toBe(0); // no music control while music is not allowed
+    await goto(page, 'Settings'); await page.getByLabel(/allow ambient music/i).check(); await page.getByRole('button', { name: /save sound settings/i }).click(); await page.getByText('SOUND SETTINGS SAVED').waitFor();
+    const toggle = page.getByRole('banner').getByRole('button', { name: /^(Play|Stop) music$/ }); await toggle.waitFor(); expect(await toggle.getAttribute('aria-pressed')).toBe('false');
+    const idle = (await counters(page)).started; await page.waitForTimeout(1500); expect((await counters(page)).started).toBe(idle); // allowed is not playing
+    await toggle.click(); expect(await toggle.getAttribute('aria-pressed')).toBe('true'); expect((await counters(page)).started).toBeGreaterThan(idle);
+    await toggle.click(); expect(await toggle.getAttribute('aria-pressed')).toBe('false'); await toggle.click(); expect(await toggle.getAttribute('aria-pressed')).toBe('true');
+    await page.reload(); await page.getByRole('banner').getByRole('button', { name: /^(Play|Stop) music$/ }).waitFor(); await page.waitForTimeout(800);
+    expect(await counters(page)).toEqual({ created: 0, started: 0 }); // a reload plays nothing and does not resume music
+    expect(await page.getByRole('banner').getByRole('button', { name: /^(Play|Stop) music$/ }).getAttribute('aria-pressed')).toBe('false'); await ctx.close();
+  });
+});
+for (const vp of VIEWPORTS) describe(`level-up cinematic at ${vp.name}`, () => {
+  it('opens once for a new level-up, traps focus, is skippable, fits the screen, passes axe, and never replays after a reload', async () => {
+    const { ctx, page } = await openClocked(vp); await registerEmpty(page); await quickCreate(page, 'Hard focus', 'hard');
+    await page.getByRole('button', { name: 'Complete Hard focus' }).click(); const d = page.getByRole('dialog'); await d.waitFor();
+    expect(await d.getAttribute('aria-modal')).toBe('true'); expect(await d.getByRole('heading').textContent()).toBe('LEVEL UP'); expect(await d.textContent()).toMatch(/Levels 2 to 3 \(2 levels\)/); expect(await d.textContent()).toMatch(/\+2 attribute points/);
+    expect(await page.evaluate(() => (document.querySelector('.shell') as HTMLElement & { inert: boolean }).inert)).toBe(true);
+    expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('Close');
+    await settle(page); // measure at rest, not mid-way through the entry animation
+    const geo = await page.evaluate(() => { const r = document.querySelector('[role=dialog]')!.getBoundingClientRect(); const bs = [...document.querySelectorAll<HTMLElement>('[role=dialog] button')].map((b) => { const x = b.getBoundingClientRect(); return [x.width, x.height, x.left, x.right]; });
+      return { l: r.left, r: r.right, t: r.top, b: r.bottom, vw: innerWidth, vh: innerHeight, sw: document.documentElement.scrollWidth, bs }; });
+    expect(geo.l).toBeGreaterThanOrEqual(0); expect(geo.r).toBeLessThanOrEqual(geo.vw + 0.5); expect(geo.t).toBeGreaterThanOrEqual(0); expect(geo.b).toBeLessThanOrEqual(geo.vh + 0.5); expect(geo.sw).toBeLessThanOrEqual(geo.vw + 1);
+    for (const [w, h, l, r] of geo.bs as number[][]) { expect(w).toBeGreaterThanOrEqual(43.5); expect(h).toBeGreaterThanOrEqual(43.5); expect(l).toBeGreaterThanOrEqual(0); expect(r).toBeLessThanOrEqual(geo.vw + 0.5); }
+    for (let i = 0; i < 4; i++) { await page.keyboard.press('Tab'); expect(await page.evaluate(() => !!document.activeElement?.closest('[role=dialog]'))).toBe(true); }
+    await page.waitForTimeout(700); expect(await axeViolations(page)).toEqual([]);
+    await page.keyboard.press('Escape'); await d.waitFor({ state: 'detached' }); expect(await page.evaluate(() => (document.querySelector('.shell') as HTMLElement & { inert: boolean }).inert)).toBe(false);
+    await page.waitForTimeout(100); expect(await page.evaluate(() => document.activeElement?.id)).toBe('main'); // the completed quest's button is gone, so focus returns to the page content
+    await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await page.waitForTimeout(1000); expect(await page.getByRole('dialog').count()).toBe(0);
+    await goto(page, 'Status'); expect(await statusLine(page)).toMatch(/Level 3/); expect((await page.getByText(/Unspent points/).textContent()) ?? '').toContain('2'); // rewards were granted exactly once
+    await goto(page, 'History'); await page.getByRole('button', { name: 'System log' }).click(); expect(await page.getByRole('list', { name: /system events/i }).getByText('LEVEL UP', { exact: true }).count()).toBe(2);
+    await ctx.close();
+  });
+});
+describe('effects tiers (real browser)', () => {
+  it('Reduced motion shows the same readable dialog with no animation; Minimal shows text banners instead of a dialog', async () => {
+    const reduced = await openClocked(VIEWPORTS[1], { reducedMotion: 'reduce' }); await registerEmpty(reduced.page); await quickCreate(reduced.page, 'Hard focus', 'hard'); await reduced.page.getByRole('button', { name: 'Complete Hard focus' }).click();
+    const d = reduced.page.getByRole('dialog'); await d.waitFor(); const info = await reduced.page.evaluate(() => { const panel = document.querySelector('.cine__panel') as HTMLElement; return { anim: getComputedStyle(panel).animationName, tier: document.querySelector('.cine')!.className, vis: getComputedStyle(panel).visibility }; });
+    expect(info.anim).toBe('none'); expect(info.tier).toMatch(/cine--reduced/); expect(info.vis).toBe('visible'); expect(await d.textContent()).toMatch(/LEVEL UP.*Levels 2 to 3/); await reduced.ctx.close();
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await registerEmpty(page); await quickCreate(page, 'One', 'hard'); await page.getByRole('button', { name: 'Complete One' }).click(); await dismissCinematic(page);
+    await goto(page, 'Settings'); await page.getByLabel(/^Effects/).selectOption('minimal'); await page.getByRole('button', { name: /save preferences/i }).click(); await page.getByText('PREFERENCES SAVED').waitFor();
+    await setNow(page, '2026-10-21T10:00:00.000Z'); await goto(page, 'Quests'); await page.getByText(/Today's quests \(2026-10-21\)/).waitFor(); // a new game day, so the 300 XP one-off cap does not apply
+    await quickCreate(page, 'Two', 'hard'); await page.getByRole('button', { name: 'Complete Two' }).click(); await page.getByText(/\+200 XP awarded/).first().waitFor();
+    const region = page.getByRole('region', { name: /notifications/i }); await page.waitForFunction(() => /LEVEL UP\s*Level 4/.test(document.querySelector('[aria-label=Notifications]')?.textContent ?? '')); expect(await region.textContent()).toMatch(/LEVEL UP.*Level 4/); expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.dataset.effects)).toBe('minimal'); await region.getByRole('button', { name: /dismiss level up/i }).click(); expect(await region.textContent()).not.toMatch(/Level 4/); await ctx.close();
   });
 });

@@ -2,7 +2,7 @@
 
 Implements the approved **Solo Leveling System PWA Specification v1.0 (FROZEN)**. Product rules and numeric values are frozen; implementation must not change them without an explicit change request.
 
-**Current implementation status: P0–P8 are implemented and tested, including real-browser (headless Chromium 131) tests of the full daily loop and the History screen. Audio/cinematics (P9) and release hardening (P10) are not started.** Quests, Status, History and Settings are all working screens. This is not yet the finished application.
+**Current implementation status: P0–P9 are implemented and tested, including real-browser (headless Chromium 131) tests of the full daily loop, History, audio autoplay behaviour and the level-up cinematic. Release hardening (P10) is not started.** Sound output was never heard or measured: audio is verified through instrumented Web Audio and fake contexts only. This is not yet the finished application.
 
 ## Run locally
 
@@ -25,20 +25,20 @@ npm run test:browser   # real-browser suite (builds first); needs a Chromium
 
 ## Latest verification
 
-Checkpoint: branch `p8-history-analytics`, built from the deployed P7 checkpoint supplied as `Solo-Leveling-System-main_e39e09.zip` (no Git history was included, so a local baseline commit was created; the remote was not fetched or updated). Results from a clean extraction of the delivered ZIP:
+Checkpoint: branch `p9-audio-cinematics`, built from the deployed P8 checkpoint supplied as `Solo-Leveling-System-main_dde100.zip` (no Git history was included, so a local baseline commit was created; the remote was not fetched or updated). Results from a clean extraction of the delivered ZIP:
 
 - `npm ci`: succeeded.
 - `npm run typecheck`: passed.
-- `npm test`: **237/237 tests passed** (domain, persistence, history read models, jsdom screens + axe).
-- `npm run test:browser`: **15/15 real-browser tests passed** (headless Chromium 131, production build; includes the P7 daily loop and the P8 History tests at 360 px and 1440 px).
+- `npm test`: **266/266 tests passed** (domain, persistence, history, audio engine, cinematic model and host, jsdom screens + axe).
+- `npm run test:browser`: **19/19 real-browser tests passed** (headless Chromium 131, production build; includes the P7 daily loop, the P8 History tests, and the P9 autoplay, cinematic and effects-tier tests).
 - `npm run build`: successful.
-- `npm audit`: 7 reported development-tooling vulnerabilities (4 moderate, 1 high, 2 critical), unchanged; `npm audit --omit=dev`: 0 vulnerabilities.
+- `npm audit`: **10** reported vulnerabilities (3 low, 4 moderate, 1 high, 2 critical), all in development tooling; `npm audit --omit=dev`: 0 vulnerabilities. The count was 7 at P8: P9 changed no dependencies (only the package version), so the three additional low-severity findings come from newly published advisories, not from this phase.
 
 Do **not** use `npm audit fix --force` without reviewing breaking-version upgrades. The dev findings come from vitest/tinypool and the vite/esbuild dev server; clearing them needs a coordinated major upgrade (vitest 4 requires vite 6+, which requires newer vite-plugin-pwa and the React plugin).
 
-**Verified in a real browser (Chromium 131 only):** rendered layouts at 360 px and 1440 px for onboarding, the shell, populated Quests/Status/Settings and all five History views (no horizontal overflow, clipped text, overlapping or obscured controls, 44 px targets); axe with colour contrast enabled (no serious/critical violations); keyboard focus and selection on the calendar; ledger and log filters; `prefers-reduced-motion`; a service-worker/offline-reload probe on localhost; and the full daily loop. Date-dependent tests use a Date shim installed by the test, not application code.
+**Verified in a real browser (Chromium 131 only):** everything listed for P8, plus: no `AudioContext` is created and no oscillator starts before a user gesture, a click then creates exactly one context and plays a cue, allowed music does not play until Play music is pressed, and a reload plays nothing and does not resume music (counted with an instrumented AudioContext); the level-up dialog (modal semantics, focus on Close, Tab trapped in the dialog, Escape/Skip, background inert, fits 360 px and 1440 px with 44 px buttons, axe clean with colour contrast, never replayed after a reload, rewards granted once); Reduced motion (same dialog, no animation); and the Minimal tier (text banner instead of a dialog).
 
-**Still unverified:** Firefox, Safari/WebKit and mobile browsers; real devices; PWA installation on Windows/Android/iOS; device lock/background throttling; offline use beyond the localhost probe; a real-time 15-minute timer block in a browser; and the GitHub Pages deployment.
+**Not verified:** how anything sounds (no audio output or measurement was possible: only that the Web Audio calls happen or do not happen); frame-time on a mid-range phone; Firefox, Safari/WebKit and mobile browsers; real devices; PWA installation; background-tab behaviour on real devices; offline use beyond the localhost probe; and the GitHub Pages deployment.
 
 ## Implementation by phase
 
@@ -47,7 +47,7 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 - Vite + React + strict TypeScript project scaffold.
 - PWA manifest, service-worker generation and install-related configuration.
 - Production build and GitHub Actions deployment workflow, configured to support a repository subpath through `BASE_PATH`.
-- GitHub Actions Deploy #6 succeeded for the earlier `main`/P5 checkpoint. P6 and P7 were subsequently confirmed visually on GitHub Pages, including the Player Awakening and the Quests, Status and Settings screens. This P8 checkpoint has not yet been deployed; verify the History screen after P8 is merged.
+- GitHub Actions Deploy #6 succeeded for the earlier `main`/P5 checkpoint. P6, P7 and P8 were subsequently confirmed visually on GitHub Pages, including Player Awakening, the Quests/Status/Settings screens and the History screen. This P9 checkpoint has not yet been deployed; verify the audio and cinematic features after P9 is merged.
 
 ### P1 — Progression engine
 
@@ -108,11 +108,20 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 - **Achievements gallery:** unlocked, locked with progress, and hidden achievements that stay hidden until unlocked.
 - Loading, empty and error states are handled (an unreadable store shows `HISTORY UNAVAILABLE` without changing data).
 
+### P9 — Audio and cinematics
+
+- **Sound (`src/audio`):** all sounds are synthesised with the Web Audio API (original, no audio files, nothing downloaded): UI click, confirm, error, quest complete, timer start/pause, level-up, rank-up, reward and achievement cues. No AudioContext exists until the first user gesture; every failure is swallowed so audio can never block play; cues are throttled and capped at 8 voices; sound suspends while the tab is hidden.
+- **Music:** off by default, allowed with a Settings checkbox, started only by pressing Play music (header toggle or Settings) and never resumed by a reload. Source: an original generated ambient loop, or the player's own file (up to 10 MB), stored in a separate IndexedDB database (`sls-media-v1`) so it is not in backups and the data schema is unchanged.
+- **Controls:** master volume, sound-effects volume, music volume, mute-all, music allowed, music source, test sound and Play music, persisted in `settings.audio` (additive optional fields `muted`, `musicSource`, `musicFileName`; no schema version change) and included in backups.
+- **Cinematics (`src/cinematics`):** new level-up and rank-promotion events open a modal dialog (Full and Reduced tiers); multiple events from one action play in order (ordinary levels batched, then the rank promotion with its own effect per rank); Minimal shows text banners; achievements show a dismissible banner. Skip and Escape close everything. Events are driven by newly committed records, acknowledged in `meta.seenEvents` when presented, so a reload, backup restore or re-render never replays them, and existing history is silently baselined, never played. Skipping or interrupting never touches rewards, XP or the ledger.
+- **Accessibility:** `role="dialog"`, `aria-modal`, labelled and described, focus moved in and trapped, background inert and hidden, focus restored (or sent to the page content if the opener is gone), polite announcements for banners, reduced motion honoured by the tier and by `prefers-reduced-motion` (Full is treated as Reduced), no flashing faster than 1 Hz.
+- **Defects found and fixed in P9:** a latent persistence bug (see `docs/IMPLEMENTATION_NOTES.md`: same-timestamp level events made later writes fail the "level never decreases" check after a database round trip) and several dialog focus/inert issues found by the new tests.
+
 ## Phase status
 
 | Phase | Status | Scope |
 |---|---|---|
-| P0 Foundations | Done (main/P5 deploy succeeded; P6 deployment pending) | Vite/React/TypeScript, PWA config, CI/deploy workflow |
+| P0 Foundations | Done (deployment workflow operational; later phase deployments verified visually through P8) | Vite/React/TypeScript, PWA config, CI/deploy workflow |
 | P1 Progression engine | Done | Formulas, ranks, rewards tables, D17 queue |
 | P2 Persistence and backup | Done | Dexie, validation, import/export, snapshots |
 | P3 Quests and day close | Done | Templates, recurrence, game days, absence handling |
@@ -121,15 +130,15 @@ Do **not** use `npm audit fix --force` without reviewing breaking-version upgrad
 | P6 Visual system and onboarding | Done; browser-verified in Chromium only | Tokens, components, shell, Player Awakening |
 | P7 Core screens | Done; browser-verified in Chromium only | Quests, Status and Settings screens; timer UI; full daily workflow |
 | P8 History and analytics | Done; browser-verified in Chromium only | Calendar, ledger view, charts, System log, achievements gallery |
-| P9 Audio and cinematics | Not started | UI sounds, optional music, level-up/rank cinematics, effects tiers |
+| P9 Audio and cinematics | Done; browser-verified in Chromium only (sound never heard) | Synthesised sounds, optional music, level-up/rank cinematics, effects tiers, volume/mute controls |
 | P10 Release hardening | Not started | Backup reminders, storage status, offline/device matrix, full acceptance |
 
 ## Important implementation decisions and unverified behavior
 
 - A completion undo that would decrease the player's level is rejected as `UNDO_BLOCKED`, preserving the frozen rule that levels/ranks never decrease. See `docs/IMPLEMENTATION_NOTES.md`.
 - Achievements are an implementation-defined catalogue because the specification requires visible and hidden achievements but does not prescribe their names; the current catalogue has 16 visible and 5 hidden.
-- Quests, Status, History and Settings are implemented (P7–P8); audio/cinematics, backup reminders and storage status are not (P9–P10). See `docs/IMPLEMENTATION_NOTES.md` for P7 and P8 decisions.
-- Rendered layout, focus, reduced motion and axe were verified in headless Chromium 131 only. Other browsers, installability on Windows/Android/iOS, real offline use beyond a localhost probe and actual device-lock behavior remain unverified. P6 and P7 were confirmed visually on GitHub Pages; the P8 checkpoint itself has not yet been deployed.
+- Quests, Status, History, Settings, audio and cinematics are implemented (P7–P9); backup reminders, storage status and release hardening are not (P10). See `docs/IMPLEMENTATION_NOTES.md` for P7–P9 decisions.
+- Rendered layout, focus, reduced motion and axe were verified in headless Chromium 131 only. Other browsers, installability on Windows/Android/iOS, real offline use beyond a localhost probe and actual device-lock behavior remain unverified. P6, P7 and P8 were confirmed visually on GitHub Pages; the P9 checkpoint itself has not yet been deployed.
 
 ## Deployment
 

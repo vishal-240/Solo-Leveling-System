@@ -69,3 +69,17 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:var(--s2) var(--s4)} d
 .filters select{background:var(--bg);color:var(--text);border:1px solid var(--edge-dim);padding:var(--s2) var(--s3);min-height:44px;border-radius:var(--radius);width:100%}
 .log,.gallery{list-style:none;padding:0;margin:0 0 var(--s3)} .log li,.gallery li{border-left:3px solid var(--edge-dim);padding:var(--s2) var(--s3);margin:0 0 var(--s2);background:var(--surface-2);overflow-wrap:anywhere}
 .gallery li[data-unlocked=true]{border-left-color:var(--ok)} table{font-size:.95rem} td,th{overflow-wrap:anywhere}
+/* P9: cinematics. Full tier animates; Reduced and Minimal (and prefers-reduced-motion) show the same readable content without motion. */
+.banners{margin:0 0 var(--s4)} .banners .sysmsg{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s3);align-items:center;overflow-wrap:anywhere}
+.cine{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:var(--s4);background:rgba(3,6,15,.94);overflow:auto}
+.cine__panel{position:relative;width:100%;max-width:520px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;margin:0;text-align:center}
+.cine__title{font-size:1.8rem;letter-spacing:.3em;color:var(--accent);margin:var(--s4) 0 var(--s2);overflow-wrap:anywhere} .cine__text{font-size:1.2rem;margin:0 0 var(--s3)}
+.cine__rewards{list-style:none;padding:0;margin:0 0 var(--s3);display:grid;gap:var(--s1)} .cine__rewards li{border:1px solid var(--edge-dim);padding:var(--s1) var(--s3);background:var(--surface-2)}
+.cine__rings{position:absolute;inset:0;pointer-events:none;overflow:hidden} .cine__ring{position:absolute;left:50%;top:40%;width:80px;height:80px;margin:-40px 0 0 -40px;border:2px solid var(--accent);border-radius:50%;opacity:0}
+.cine--full{animation:cine-fade .35s ease-out} .cine--full .cine__panel{animation:cine-in .5s ease-out} .cine--full .cine__title{animation:cine-glow 2s ease-in-out infinite} .cine--full .cine__ring{animation:cine-ring 2.4s ease-out infinite}
+.cine--rank-D .cine__panel{--rank:#2fd0ff} .cine--rank-C .cine__panel{--rank:#6ff0b0} .cine--rank-B .cine__panel{--rank:#ffd166} .cine--rank-A .cine__panel{--rank:#ff9f68} .cine--rank-S .cine__panel{--rank:#d9a8ff}
+.cine--rank-D .cine__panel,.cine--rank-C .cine__panel,.cine--rank-B .cine__panel,.cine--rank-A .cine__panel,.cine--rank-S .cine__panel{border-color:var(--rank)} .cine--rank-D .cine__title,.cine--rank-C .cine__title,.cine--rank-B .cine__title,.cine--rank-A .cine__title,.cine--rank-S .cine__title{color:var(--rank)} .cine__ring{border-color:var(--rank,var(--accent))}
+.cine--full.cine--rank-S .cine__panel{background-image:linear-gradient(110deg,transparent 40%,rgba(217,168,255,.18) 50%,transparent 60%);background-size:250% 100%;animation:cine-in .5s ease-out,cine-shimmer 4s linear infinite}
+@keyframes cine-fade{from{opacity:0}to{opacity:1}} @keyframes cine-in{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}} @keyframes cine-glow{0%,100%{text-shadow:0 0 4px var(--accent)}50%{text-shadow:0 0 16px var(--accent)}}
+@keyframes cine-ring{0%{opacity:.8;transform:scale(.4)}100%{opacity:0;transform:scale(5)}} @keyframes cine-shimmer{from{background-position:150% 0}to{background-position:-100% 0}}
+[data-effects="reduced"] .cine__rings,[data-effects="minimal"] .cine__rings{display:none}
