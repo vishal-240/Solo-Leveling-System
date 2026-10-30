@@ -47,7 +47,7 @@ const snapshot = obj({ title: z.string().min(1), category: ATTR, kind, difficult
   potentialXp: nn, penaltyTier: tier });
 const SINGLETON_SCHEMAS = {
   meta: z.union([obj({}).refine((o) => Object.keys(o).length === 0), obj({ schemaVersion: z.number().int().min(1), appVersion: z.string().min(1),
-    installId: z.string().optional(), lastExportAt: iso.optional(), lastImportAt: iso.optional() })]),
+    installId: z.string().optional(), lastExportAt: iso.optional(), lastImportAt: iso.optional(), seenEvents: z.array(z.string()).max(2000).optional() })]),
   player: z.union([obj({}).refine((o) => Object.keys(o).length === 0), obj({ name: z.string().min(1), createdAt: iso.optional(),
     allocationMode: z.enum(['manual', 'balanced', 'momentum']).optional(), unspentPoints: nn.optional(),
     streakShields: z.number().int().min(0).max(3).optional(), queuedShields: nn.optional(), equippedTitleId: z.string().optional(),
@@ -55,7 +55,8 @@ const SINGLETON_SCHEMAS = {
   settings: obj({ timezone: tz.optional(), resetTime: hhmm.optional(), weekStart: z.number().int().min(0).max(6).optional(),
     resetPolicyHistory: z.array(obj({ effectiveFromDayKey: dayKey, timezone: tz, resetTime: hhmm })).optional(),
     penaltyStrictness: z.literal('strict').optional(), effects: z.enum(['full', 'reduced', 'minimal']).optional(),
-    audio: obj({ master: z.number().min(0).max(1), music: z.number().min(0).max(1), sfx: z.number().min(0).max(1), musicEnabled: z.boolean() }).optional(),
+    audio: obj({ master: z.number().min(0).max(1), music: z.number().min(0).max(1), sfx: z.number().min(0).max(1), musicEnabled: z.boolean(),
+      muted: z.boolean().optional(), musicSource: z.enum(['generated', 'file']).optional(), musicFileName: z.string().max(200).optional() }).optional(),
     backupReminderDays: z.union([z.literal(3), z.literal(7), z.literal(14), z.literal(30)]).optional(), lastBackupAt: iso.optional() }),
 };
 const schemas: Record<Collection, z.ZodTypeAny> = {
@@ -211,7 +212,8 @@ export function checkInvariants(p: Payload): string[] {
     e.push('lastProcessedDayKey is required when day records exist');
   else if (days.length && lastProcessedDayKey !== days[days.length - 1])
     e.push('lastProcessedDayKey does not match the last day record');
-  const lv = [...p.levelEvents].sort((a, b) => String(a.at).localeCompare(String(b.at))).map((l) => Number(l.level));
+  // events sharing a timestamp (one award crossing several levels) are ordered by level, not by storage order ('level:10' sorts before 'level:2' as text)
+  const lv = [...p.levelEvents].sort((a, b) => String(a.at).localeCompare(String(b.at)) || Number(a.level) - Number(b.level)).map((l) => Number(l.level));
   if (lv.some((l, i) => i && l < lv[i - 1]!)) e.push('level decreased over time');
   return e;
 }

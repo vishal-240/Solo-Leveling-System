@@ -24,6 +24,7 @@ async function boot(starters: string[] = []) {
   const view = render(<App db={db} />); await screen.findByRole('heading', { name: /^quests$/i, level: 1 }); return view;
 }
 const nav = async (name: string) => { await userEvent.click(within(screen.getByRole('navigation', { name: /primary/i })).getByRole('button', { name })); await screen.findByRole('heading', { name: new RegExp(`^${name}$`, 'i'), level: 1 }); };
+const skipCinematic = async () => { const d = await screen.findByRole('dialog'); await userEvent.click(within(d).getByRole('button', { name: 'Skip' })); await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull()); };
 const quick = async (title: string, difficulty = 'easy') => {
   await userEvent.type(screen.getByLabelText(/quest title/i), title); await userEvent.selectOptions(screen.getByLabelText(/difficulty/i), difficulty);
   await userEvent.click(screen.getByRole('button', { name: /create quest/i }));
@@ -43,6 +44,7 @@ describe('Quests screen', () => {
     await userEvent.dblClick(screen.getByRole('button', { name: 'Complete Read paper' }));
     expect(await screen.findByText('QUEST COMPLETED')).toBeTruthy(); expect(await screen.findByText(/\+100 XP awarded/)).toBeTruthy();
     expect([await xp('player'), await xp('discipline')]).toEqual([100, 100]); expect((await loadPayload(db)).xpTransactions).toHaveLength(2);
+    await skipCinematic(); // reaching level 2 opens the level-up dialog
     expect(screen.queryByRole('button', { name: 'Complete Read paper' })).toBeNull();
     expect(screen.queryByRole('button', { name: /undo read paper/i })).toBeNull(); expect(screen.getByText(/reached a new level, and levels are never lost/i)).toBeTruthy(); // first completion reached level 2
     await quick('Small win'); await userEvent.click(await screen.findByRole('button', { name: 'Complete Small win' })); await screen.findByText(/\+50 XP awarded/);
@@ -77,7 +79,7 @@ describe('Quests screen', () => {
 });
 describe('Status screen', () => {
   it('shows ledger-derived progress, allocates points, distributes the bank and limits respec', async () => {
-    const { container } = await boot(); await quick('Big one', 'hard'); await userEvent.click(await screen.findByRole('button', { name: 'Complete Big one' })); await screen.findByText(/\+200 XP awarded/);
+    const { container } = await boot(); await quick('Big one', 'hard'); await userEvent.click(await screen.findByRole('button', { name: 'Complete Big one' })); await screen.findByText(/\+200 XP awarded/); await skipCinematic();
     await nav('Status'); const line = within(screen.getByRole('main')).getByText(/Total XP/).textContent!; expect(line).toMatch(/Rank E/); expect(line).toMatch(/Level 3/); expect(line).toContain('200'); expect(screen.getByText(/Unspent points/).textContent).toContain('2'); expect(screen.getByRole('img', { name: /stat points radar/i })).toBeTruthy();
     expect(await a11y(container)).toEqual([]);
     await userEvent.click(screen.getByRole('button', { name: 'Add 1 point to Coding' })); expect(await screen.findByText('POINT ALLOCATED')).toBeTruthy();

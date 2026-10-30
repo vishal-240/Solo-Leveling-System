@@ -56,3 +56,14 @@ export const exportBackupText = (db: SlsDb, now = new Date()) => withSingleWrite
   return exportBackup(await loadPayload(db), __APP_VERSION__, now);
 });
 export const importBackupText = (db: SlsDb, text: string, now = new Date()) => withSingleWriterLock(() => importBackup(db, text, now));
+
+/** Records that playback of these progression events has been shown (or silently baselined). Idempotent; never touches XP, rewards or the ledger. */
+export const acknowledgeEvents = (db: SlsDb, ids: string[]) => tx(db, (p) => {
+  const q = structuredClone(p); const have = new Set(Array.isArray(q.meta.seenEvents) ? (q.meta.seenEvents as unknown[]).map(String) : []);
+  for (const id of ids) have.add(id); const next = [...have].sort(); if (Array.isArray(p.meta.seenEvents) && next.length === (p.meta.seenEvents as unknown[]).length) return { payload: p, result: false };
+  q.meta.seenEvents = next; return { payload: q, result: true };
+});
+export const baselineEvents = (db: SlsDb, ids: string[]) => tx(db, (p) => { if (Array.isArray(p.meta.seenEvents)) return { payload: p, result: false }; const q = structuredClone(p); q.meta.seenEvents = [...new Set(ids)].sort(); return { payload: q, result: true }; });
+export const updateAudioSettings = (db: SlsDb, a: { master: number; sfx: number; music: number; muted: boolean; musicEnabled: boolean; musicSource: 'generated' | 'file'; musicFileName?: string }) => tx(db, (p) => {
+  const q = structuredClone(p); const { musicFileName, ...rest } = a; q.settings.audio = { ...rest, ...(musicFileName ? { musicFileName } : {}) }; return { payload: q, result: true };
+});
