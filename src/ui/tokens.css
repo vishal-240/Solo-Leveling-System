@@ -6,7 +6,7 @@
   --font-ui:"Rajdhani","Exo 2","Segoe UI",system-ui,sans-serif; --font-mono:"Share Tech Mono",ui-monospace,Consolas,monospace;
   --glow:0 0 10px rgba(47,208,255,.35); color-scheme:dark;
 }
-*{box-sizing:border-box} html,body{height:100%}
+*{box-sizing:border-box} html{height:100%;background:var(--bg)} body{min-height:100%} /* a solid page colour under the decorative gradient keeps contrast measurable by assistive tooling */
 body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#0a2340 0%,var(--bg) 60%) fixed;color:var(--text);font:400 1rem/1.5 var(--font-ui);
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 h1,h2,h3{font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0 0 var(--s3)} h1{font-size:1.5rem} h2{font-size:1.2rem} h3{font-size:1rem}

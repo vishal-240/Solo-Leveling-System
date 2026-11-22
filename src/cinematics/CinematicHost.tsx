@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { acknowledgeEvents, baselineEvents } from '../app/actions';
 import { audio as defaultAudio } from '../audio';
@@ -30,11 +30,12 @@ export function CinematicHost({ db, payload, refresh, tier, engine = defaultAudi
   useEffect(() => { if (step) engine.play(step.kind === 'rank' ? 'rank' : 'level'); }, [step, engine]);
   const soundedBanners = useRef(new Set<string>());
   useEffect(() => { for (const b of banners) if (!soundedBanners.current.has(b.id)) { soundedBanners.current.add(b.id); engine.play(b.sound); } }, [banners, engine]);
-  useEffect(() => {
+  // Layout effects: focus moves into the dialog in the same commit that shows it (no moment where it is visible but focus is elsewhere).
+  useLayoutEffect(() => {
     if (!active) return; primary.current?.focus(); const shell = document.querySelector('.shell'); shell?.setAttribute('inert', ''); shell?.setAttribute('aria-hidden', 'true');
     return () => { shell?.removeAttribute('inert'); shell?.removeAttribute('aria-hidden'); };
   }, [active === null]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (active) primary.current?.focus(); }, [active?.index]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { if (active) primary.current?.focus(); }, [active?.index]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The shell is un-inerted before focus moves, otherwise focusing an element inside it would silently fail.
   const close = () => { setActive(null); const o = opener.current; opener.current = null; const shell = document.querySelector('.shell'); shell?.removeAttribute('inert'); shell?.removeAttribute('aria-hidden'); setTimeout(() => { if (o && o !== document.body && document.contains(o)) o.focus(); else document.getElementById('main')?.focus(); }, 0); };

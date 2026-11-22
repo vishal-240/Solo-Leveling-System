@@ -60,7 +60,7 @@ describe('History screen with recorded days', () => {
   });
   it('system log: categories, newest first, selected-day filter, no duplicate level notifications', async () => {
     await openHistory(); await view('System log'); const items = () => within(screen.getByRole('list', { name: /system events/i })).getAllByRole('listitem');
-    const all = items().length; expect(screen.getByRole('status').textContent).toMatch(new RegExp(`of ${all} events`)); expect(items().filter((i) => /LEVEL UP/.test(i.textContent!)).length).toBe(2);
+    const all = items().length; expect(screen.getByText(/events, newest first/).textContent).toMatch(new RegExp(`of ${all} events`)); expect(items().filter((i) => /LEVEL UP/.test(i.textContent!)).length).toBe(2);
     await userEvent.selectOptions(screen.getByLabelText('Category'), 'Penalties'); expect(items()).toHaveLength(2); expect(items()[0]!.textContent).toMatch(/XP DEDUCTED/); expect(await a11y(document.body)).toEqual([]);
   });
   it('achievement gallery separates unlocked, locked and hidden', async () => {

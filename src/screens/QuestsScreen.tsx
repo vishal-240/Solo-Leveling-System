@@ -9,7 +9,7 @@ import { SELF_REPORT_NOTICE, gapPrompt } from '../timer/text';
 import { undoCompletionDb } from '../timer/runtime';
 import { Panel, SystemMessage } from '../ui/components';
 import { QuestForm } from './QuestForm';
-import { formFromDefinition, scheduleLabel } from './questForm';
+import { formFromDefinition, scheduleLabel } from './quest-form';
 import { Feedback, useAction, type ScreenProps } from './shared';
 
 const STATE_LABEL: Record<string, string> = { OPEN: 'Open', COMPLETED: 'Completed', PARTIAL: 'Partially banked', MISSED: 'Missed', LAPSED: 'Lapsed', SKIPPED: 'Skipped', EXEMPT: 'Protected (exempt)' };

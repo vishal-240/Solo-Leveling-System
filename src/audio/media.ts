@@ -2,7 +2,8 @@
 import Dexie from 'dexie';
 export const MAX_MUSIC_BYTES = 10 * 1024 * 1024;
 interface FileRow { id: 'music'; name: string; type: string; blob: Blob }
-class MediaDb extends Dexie { files!: Dexie.Table<FileRow, string>; constructor(name = 'sls-media-v1') { super(name); this.version(1).stores({ files: 'id' }); } }
+class MediaDb extends Dexie { files!: Dexie.Table<FileRow, string>; handles!: Dexie.Table<{ id: string; handle: unknown }, string>;
+  constructor(name = 'sls-media-v1') { super(name); this.version(1).stores({ files: 'id' }); this.version(2).stores({ files: 'id', handles: 'id' }); } }
 let db: MediaDb | null = null; const get = () => (db ??= new MediaDb());
 export const resetMediaDb = (name?: string) => { db = name ? new MediaDb(name) : null; };
 export function validateMusicFile(f: { size: number; type: string; name: string }): string | undefined {
@@ -12,3 +13,6 @@ export function validateMusicFile(f: { size: number; type: string; name: string 
 export async function saveMusicFile(f: File) { const e = validateMusicFile(f); if (e) throw new Error(e); await get().files.put({ id: 'music', name: f.name, type: f.type, blob: f }); }
 export async function loadMusicFile(): Promise<{ name: string; blob: Blob } | null> { const r = await get().files.get('music'); return r ? { name: r.name, blob: r.blob } : null; }
 export async function clearMusicFile() { await get().files.delete('music'); }
+export async function saveHandle(handle: unknown) { await get().handles.put({ id: 'autosave', handle }); }
+export async function loadHandle(): Promise<unknown | null> { return (await get().handles.get('autosave'))?.handle ?? null; }
+export async function clearHandle() { await get().handles.delete('autosave'); }

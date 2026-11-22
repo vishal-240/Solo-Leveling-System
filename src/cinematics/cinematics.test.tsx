@@ -68,7 +68,7 @@ describe('cinematic host', () => {
     await seed(withXp(3), []); const engine = makeEngine(); const first = render(<Harness tier="full" engine={engine} />);
     const d = await dialog(); expect([d.getAttribute('aria-modal'), within(d).getByRole('heading').textContent, d.getAttribute('aria-labelledby')]).toEqual(['true', 'LEVEL UP', 'cine-title']);
     expect(within(d).getByText('Levels 2 to 3 (2 levels)')).toBeTruthy(); expect(within(d).getByRole('list', { name: /rewards earned/i }).textContent).toMatch(/\+2 attribute points/);
-    expect(document.activeElement).toBe(within(d).getByRole('button', { name: 'Close' })); expect(engine.played.filter((s) => s === 'level')).toHaveLength(1);
+    expect(document.activeElement).toBe(within(d).getByRole('button', { name: 'Close' })); await waitFor(() => expect(engine.played.filter((s) => s === 'level')).toHaveLength(1)); // passive effects flush after the dialog is in the DOM
     expect(document.querySelector('.shell')!.hasAttribute('inert')).toBe(true); expect(document.querySelector('.shell')!.getAttribute('aria-hidden')).toBe('true');
     await waitFor(async () => expect((await loadPayload(db)).meta.seenEvents).toEqual(expect.arrayContaining(['level:2', 'level:3'])));
     await userEvent.click(within(d).getByRole('button', { name: 'Close' })); await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull()); expect(document.querySelector('.shell')!.hasAttribute('inert')).toBe(false);
@@ -87,7 +87,7 @@ describe('cinematic host', () => {
     expect(within(d).getByRole('heading').textContent).toBe('LEVEL UP'); expect(within(d).getByText(/Event 1 of 2/)).toBeTruthy();
     await userEvent.click(within(d).getByRole('button', { name: 'Continue' })); await waitFor(() => expect(screen.getByRole('heading', { name: 'RANK PROMOTION' })).toBeTruthy());
     const r = screen.getByRole('dialog'); expect(r.parentElement!.className).toMatch(/cine--rank-D/); expect(r.querySelectorAll('.cine__ring')).toHaveLength(1); expect(within(r).getByText(/Event 2 of 2/)).toBeTruthy();
-    expect(engine.played.filter((s) => s === 'level' || s === 'rank')).toEqual(['level', 'rank']); await userEvent.click(within(r).getByRole('button', { name: 'Close' })); await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(engine.played.filter((s) => s === 'level' || s === 'rank')).toEqual(['level', 'rank'])); await userEvent.click(within(r).getByRole('button', { name: 'Close' })); await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
   it('Skip and Escape dismiss everything, acknowledge it, and leave rewards and XP untouched', async () => {
     const full = withXp(10); await seed(full, []); render(<Harness tier="full" engine={makeEngine()} />); const d = await dialog();
@@ -102,14 +102,14 @@ describe('cinematic host', () => {
   });
   it('Reduced tier shows the same readable dialog without ring effects; Minimal shows text banners only', async () => {
     await seed(withXp(10), []); const reduced = render(<Harness tier="reduced" engine={makeEngine()} />); const d = await dialog(); expect(d.parentElement!.className).toMatch(/cine--reduced/); expect(d.querySelectorAll('.cine__ring')).toHaveLength(0);
-    expect(within(d).getByText(/Levels 2 to 9/)).toBeTruthy(); reduced.unmount(); cleanup();
+    expect(within(d).getByText(/Levels 2 to 9/)).toBeTruthy(); await waitFor(async () => expect((await loadPayload(db)).meta.seenEvents).toContain('rank:D')); reduced.unmount(); cleanup(); // let the acknowledgement land before re-seeding the same database
     await seed(withXp(10), []); const engine = makeEngine(); render(<Harness tier="minimal" engine={engine} />); const region = await screen.findByRole('region', { name: /notifications/i });
-    expect(screen.queryByRole('dialog')).toBeNull(); expect(region.textContent).toMatch(/LEVEL UP.*Levels 2 to 9/); expect(region.textContent).toMatch(/RANK PROMOTION.*Rank D: Initiate/); expect(engine.played).toEqual(expect.arrayContaining(['level', 'rank']));
+    expect(screen.queryByRole('dialog')).toBeNull(); expect(region.textContent).toMatch(/LEVEL UP.*Levels 2 to 9/); expect(region.textContent).toMatch(/RANK PROMOTION.*Rank D: Initiate/); await waitFor(() => expect(engine.played).toEqual(expect.arrayContaining(['level', 'rank'])));
     await userEvent.click(within(region).getByRole('button', { name: /dismiss level up/i })); expect(region.textContent).not.toMatch(/Levels 2 to 9/);
   });
   it('announces new achievements once as a dismissible banner with its own sound', async () => {
     const p = withXp(2); await seed(p, M.allEventIds(p).filter((i) => !i.startsWith('ach:'))); const engine = makeEngine(); const v = render(<Harness tier="full" engine={engine} />);
-    const region = await screen.findByRole('region', { name: /notifications/i }); expect(region.textContent).toMatch(/ACHIEVEMENT UNLOCKED.*First Level Up/); expect(screen.queryByRole('dialog')).toBeNull(); expect(engine.played).toContain('achievement'); await waitFor(async () => expect((await loadPayload(db)).meta.seenEvents).toContain('ach:first_level_up')); v.unmount();
+    const region = await screen.findByRole('region', { name: /notifications/i }); expect(region.textContent).toMatch(/ACHIEVEMENT UNLOCKED.*First Level Up/); expect(screen.queryByRole('dialog')).toBeNull(); await waitFor(() => expect(engine.played).toContain('achievement')); await waitFor(async () => expect((await loadPayload(db)).meta.seenEvents).toContain('ach:first_level_up')); v.unmount();
     render(<Harness tier="full" engine={engine} />); await screen.findByRole('heading', { name: 'App' }); await new Promise((r) => setTimeout(r, 50)); expect(screen.queryByRole('region', { name: /notifications/i })).toBeNull();
   });
   it('still works when audio is unavailable or failing, and does not lose the acknowledgement', async () => {

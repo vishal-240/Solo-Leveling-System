@@ -3,6 +3,7 @@ import { Field, Panel, SystemMessage } from '../ui/components';
 import { ATTR_KEYS, STARTERS, STEPS, SKIPPABLE, clearDraft, defaultDraft, definitionsFor, effectiveName, loadDraft, saveDraft, skipStep, validateStep,
   type AttrKey, type CustomQuest, type Draft, type Errors, type StepId } from './model';
 import { OnboardingError, registerPlayer } from './register';
+import { RestorePanel } from './RestorePanel';
 import type { SlsDb } from '../persist/store';
 import { SELF_REPORT_NOTICE } from '../timer/text';
 
@@ -131,6 +132,7 @@ export function Onboarding({ db, onRegistered, now = () => new Date(), storage =
           </span>
         </div>
       </Panel>
+      {step === 'awakening' && <Panel title="Restore"><RestorePanel db={db} onRestored={() => { clearDraft(storage); onRegistered(); }} /></Panel>}
     </main>
   );
 }

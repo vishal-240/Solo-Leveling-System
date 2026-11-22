@@ -47,7 +47,8 @@ const snapshot = obj({ title: z.string().min(1), category: ATTR, kind, difficult
   potentialXp: nn, penaltyTier: tier });
 const SINGLETON_SCHEMAS = {
   meta: z.union([obj({}).refine((o) => Object.keys(o).length === 0), obj({ schemaVersion: z.number().int().min(1), appVersion: z.string().min(1),
-    installId: z.string().optional(), lastExportAt: iso.optional(), lastImportAt: iso.optional(), seenEvents: z.array(z.string()).max(2000).optional() })]),
+    installId: z.string().optional(), lastExportAt: iso.optional(), lastImportAt: iso.optional(), seenEvents: z.array(z.string()).max(2000).optional(),
+    reminderSnoozedUntil: iso.optional(), transferGrace: z.array(dayKey).max(3).optional() })]),
   player: z.union([obj({}).refine((o) => Object.keys(o).length === 0), obj({ name: z.string().min(1), createdAt: iso.optional(),
     allocationMode: z.enum(['manual', 'balanced', 'momentum']).optional(), unspentPoints: nn.optional(),
     streakShields: z.number().int().min(0).max(3).optional(), queuedShields: nn.optional(), equippedTitleId: z.string().optional(),
@@ -105,8 +106,11 @@ const envelopeSchema = z.object({
 
 export function canonical(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
-  if (v && typeof v === 'object')
-    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Obj)[k])}`).join(',')}}`;
+  if (v && typeof v === 'object') {
+    const obj = v as Obj;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(obj[k])}`).join(',')}}`;
+  }
   return JSON.stringify(v) ?? 'null';
 }
 export async function sha256Hex(text: string): Promise<string> {
@@ -233,8 +237,11 @@ export function repairCaches(p: Payload): { payload: Payload; repaired: string[]
   return { payload: out, repaired };
 }
 /** Steps 4-6 on a payload (used by import, startup and snapshot restore). */
-export function validatePayload(p: unknown): { errors: string[]; stage?: 'schema' | 'integrity'; payload?: Payload; repaired: string[] } {
-  const z4 = payloadSchema.safeParse(p);
+/** `changed` (optional): per collection, the ids of rows that are new or modified since they were last validated. Unchanged rows skip the per-row schema check (references,
+ *  invariants and caches are always checked over the whole payload), which keeps a single action fast on years of history. */
+export function validatePayload(p: unknown, changed?: Partial<Record<Collection, Set<string>>>): { errors: string[]; stage?: 'schema' | 'integrity'; payload?: Payload; repaired: string[] } {
+  const subset = changed && p && typeof p === 'object' ? { ...(p as Obj), ...Object.fromEntries(COLLECTIONS.map((c) => { const rows = (p as Payload)[c]; return [c, Array.isArray(rows) && changed[c] ? rows.filter((r) => changed[c]!.has(String((r as Obj).id))) : rows]; })) } : p;
+  const z4 = payloadSchema.safeParse(subset);
   if (!z4.success) return { errors: z4.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).slice(0, 10), stage: 'schema', repaired: [] };
   const typed = p as Payload;
   const errors = [...checkReferences(typed), ...checkInvariants(typed)];

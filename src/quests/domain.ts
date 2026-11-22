@@ -247,6 +247,7 @@ export function removeRestDay(p: Payload, restDayId: string): Payload {
   if (idx < 0) throw new Error('Rest day not found'); arr.splice(idx, 1); return out;
 }
 export function isProtectedRestDay(p: Payload, dayKey: string, settings: SettingsLike): boolean {
+  if (Array.isArray(p.meta.transferGrace) && (p.meta.transferGrace as unknown[]).includes(dayKey)) return true; // D16: days right after a backup import are exempt (device transfer), capped at 3
   const start = dayStartForSettings(dayKey, settings).getTime(); const weekday = weekdayOf(dayKey);
   return records(p, 'restDays').some((r) => Date.parse(String(r.declaredAt)) < start &&
     ((r.kind === 'adhoc' && r.dayKey === dayKey) || (r.kind === 'recurring' && Number(r.weekday) === weekday)));
