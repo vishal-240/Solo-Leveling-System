@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFromForm, emptyForm, formFromDefinition, scheduleLabel, validateForm } from './questForm';
+import { buildFromForm, emptyForm, formFromDefinition, scheduleLabel, validateForm } from './quest-form';
 
 const today = '2026-10-20';
 describe('quest form model', () => {

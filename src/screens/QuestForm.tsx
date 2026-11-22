@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Field } from '../ui/components';
-import { ATTRS, WEEKDAYS, buildFromForm, emptyForm, validateForm, type Built, type FormState, type Repeat } from './questForm';
+import { ATTRS, WEEKDAYS, buildFromForm, emptyForm, validateForm, type Built, type FormState, type Repeat } from './quest-form';
 
 const LABEL: Record<string, string> = { academics: 'Academics', fitness: 'Fitness', coding: 'Coding', discipline: 'Discipline', recovery: 'Recovery' };
 export function QuestForm({ today, initial, mode, onSubmit, onCancel, busy }: { today: string; initial?: FormState; mode: 'create' | 'edit'; onSubmit: (b: Built) => Promise<boolean>; onCancel?: () => void; busy: boolean }) {

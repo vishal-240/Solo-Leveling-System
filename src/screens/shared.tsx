@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { audio, soundForTitle } from '../audio';
+import { describeStorageError } from '../storage/status';
 import { SystemMessage } from '../ui/components';
 
 export interface Msg { kind: 'ok' | 'error'; title: string; text: string }
@@ -9,7 +10,7 @@ export function useAction(refresh: () => Promise<void>) {
   const run = useCallback(async <T,>(okTitle: string, okText: string | ((r: T) => string), f: () => Promise<T>): Promise<boolean> => {
     if (lock.current) return false; lock.current = true; setBusy(true);
     try { const r = await f(); await refresh(); audio.play(soundForTitle(okTitle)); setMsg({ kind: 'ok', title: okTitle, text: typeof okText === 'function' ? okText(r) : okText }); return true; }
-    catch (e) { await refresh().catch(() => undefined); audio.play('error'); setMsg({ kind: 'error', title: 'ACTION FAILED', text: e instanceof Error ? e.message : String(e) }); return false; }
+    catch (e) { await refresh().catch(() => undefined); audio.play('error'); setMsg({ kind: 'error', title: 'ACTION FAILED', text: describeStorageError(e) }); return false; }
     finally { lock.current = false; setBusy(false); }
   }, [refresh]);
   return { run, busy, msg, clear: () => setMsg(null) };

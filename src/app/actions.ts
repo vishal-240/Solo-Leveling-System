@@ -67,3 +67,12 @@ export const baselineEvents = (db: SlsDb, ids: string[]) => tx(db, (p) => { if (
 export const updateAudioSettings = (db: SlsDb, a: { master: number; sfx: number; music: number; muted: boolean; musicEnabled: boolean; musicSource: 'generated' | 'file'; musicFileName?: string }) => tx(db, (p) => {
   const q = structuredClone(p); const { musicFileName, ...rest } = a; q.settings.audio = { ...rest, ...(musicFileName ? { musicFileName } : {}) }; return { payload: q, result: true };
 });
+
+export const snoozeReminder = (db: SlsDb, now = new Date()) => tx(db, (p) => { const q = structuredClone(p); q.meta.reminderSnoozedUntil = new Date(now.getTime() + 86_400_000).toISOString(); return { payload: q, result: true }; });
+export const setReminderDays = (db: SlsDb, days: 3 | 7 | 14 | 30) => tx(db, (p) => { const q = structuredClone(p); q.settings.backupReminderDays = days; return { payload: q, result: true }; });
+export interface BackupPreview { ok: true; name: string; level: number; rank: string; totalXp: number; lastDay: string; exportedAt: string; appVersion: string; quests: number; days: number; ledger: number }
+/** Validates a backup file and describes what it contains without touching stored data. */
+export async function previewBackup(text: string): Promise<BackupPreview | { ok: false; code: string; message: string }> {
+  const { validateBackup } = await import('../persist/backup'); const r = await validateBackup(text); if (!r.ok) return r; const e = r.value;
+  return { ok: true, name: e.summary.playerName, level: e.summary.level, rank: e.summary.rank, totalXp: e.summary.totalXp, lastDay: e.summary.lastDayKey, exportedAt: e.exportedAt, appVersion: e.appVersion, quests: e.payload.templates.length, days: e.payload.dayRecords.length, ledger: e.payload.xpTransactions.length };
+}

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { addRest, changeReset, exportBackupText, importBackupText, removeRest, setMode, todayKey, updatePreferences, updateProfile, validateName } from '../app/actions';
+import { addRest, changeReset, removeRest, setMode, todayKey, updatePreferences, updateProfile, validateName } from '../app/actions';
 import { isValidReset, isValidTimezone } from '../onboarding/model';
 import { SCHEMA_VERSION } from '../persist/backup';
-import { WEEKDAYS } from './questForm';
+import { WEEKDAYS } from './quest-form';
 import type { AllocationMode } from '../rewards/rewards';
 import { SELF_REPORT_NOTICE } from '../timer/text';
 import { Field, Panel, SystemMessage } from '../ui/components';
 import { Feedback, useAction, type ScreenProps } from './shared';
+import { BackupPanel, InstallPanel, StoragePanel } from './DevicePanels';
 import { audio, applyMusicSource, prefsFromSettings } from '../audio';
 import { clearMusicFile, saveMusicFile, validateMusicFile } from '../audio/media';
 import { updateAudioSettings } from '../app/actions';
@@ -18,30 +19,15 @@ export function SettingsScreen({ db, payload, refresh }: ScreenProps) {
   const [tz, setTz] = useState(String(s.timezone ?? 'UTC')); const [reset, setReset] = useState(String(s.resetTime ?? '04:00'));
   const [weekday, setWeekday] = useState('0'); const [restDay, setRestDay] = useState('');
   const [effects, setEffects] = useState((s.effects as 'full' | 'reduced' | 'minimal') ?? 'full'); const saved = prefsFromSettings(s); const sa = (s.audio ?? {}) as { musicSource?: 'generated' | 'file'; musicFileName?: string };
-  const [file, setFile] = useState<File | null>(null); const [confirmImport, setConfirmImport] = useState(false);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const mode = (['balanced', 'momentum'].includes(String(payload.player.allocationMode)) ? payload.player.allocationMode : 'manual') as AllocationMode;
   const today = todayKey(payload, new Date());
   const rests = payload.restDays as unknown as { id: string; kind: string; weekday?: number; dayKey?: string }[];
-  const lastExport = payload.meta.lastExportAt ? new Date(String(payload.meta.lastExportAt)).toLocaleString() : 'never';
 
   const saveProfile = () => { const e = validateName(name); setErrs({ ...errs, name: e ?? '' }); if (!e) void run('PROFILE SAVED', 'Profile updated.', () => updateProfile(db, name, title)); };
   const saveReset = () => {
     const e: Record<string, string> = { ...errs, timezone: isValidTimezone(tz) ? '' : 'Enter a valid timezone, for example Asia/Kolkata.', resetTime: isValidReset(reset) ? '' : 'Enter a time as HH:MM.' }; setErrs(e);
     if (!e.timezone && !e.resetTime) void run('GAME DAY UPDATED', 'The new reset policy applies from the next game day. Today is unchanged.', () => changeReset(db, tz, reset, new Date()));
-  };
-  const download = async () => {
-    await run('BACKUP EXPORTED', 'Backup file downloaded. Keep it somewhere safe: it is the only protection against cleared browser data.', async () => {
-      const text = await exportBackupText(db, new Date()); const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-      const a = document.createElement('a'); a.href = url; a.download = `system-backup-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
-  };
-  const doImport = async () => {
-    if (!file || !confirmImport) return;
-    await run('BACKUP IMPORTED', (r: string[]) => `Backup restored. ${r.length ? `Repaired: ${r.join('; ')}` : 'All data validated.'}`, async () => {
-      const r = await importBackupText(db, await file.text(), new Date()); if (!r.ok) throw new Error(`Import refused (${r.code}): ${r.message}. Your current data was not changed.`);
-      setFile(null); setConfirmImport(false); return r.warnings ?? [];
-    });
   };
   return (
     <>
@@ -74,13 +60,9 @@ export function SettingsScreen({ db, payload, refresh }: ScreenProps) {
       <Panel title="Fixed rules">
         <p>Penalties: <strong>Strict</strong>. Timers: elapsed time from timestamps; a gap over 10 minutes asks how much counts. {SELF_REPORT_NOTICE} The specification does not make these configurable.</p>
       </Panel>
-      <Panel title="Backup">
-        <p className="hint">Last export: {lastExport}. Data lives only in this browser; clearing site data deletes it. Export regularly.</p>
-        <button type="button" className="btn btn--primary" disabled={busy} onClick={download}>Export backup</button>
-        <Field id="import-file" label="Import a backup file" hint="Replaces all current data after validation. A snapshot of the current data is kept first.">{(p) => <input type="file" accept="application/json,.json" {...p} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />}</Field>
-        <label className="check"><input type="checkbox" checked={confirmImport} onChange={(e) => setConfirmImport(e.target.checked)} />I understand this replaces my current data</label>
-        <button type="button" className="btn" disabled={busy || !file || !confirmImport} onClick={doImport}>Import backup</button>
-      </Panel>
+      <BackupPanel db={db} payload={payload} run={run} busy={busy} />
+      <StoragePanel run={run} busy={busy} />
+      <InstallPanel run={run} busy={busy} />
       <Panel title="About">
         <p>SYSTEM version {__APP_VERSION__} · data schema {SCHEMA_VERSION} · Specification v1.0 (frozen)</p>
         <SystemMessage title="NOT YET IMPLEMENTED">Backup reminders, storage status and device checks arrive in a later phase.</SystemMessage>

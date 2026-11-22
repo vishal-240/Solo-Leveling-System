@@ -233,7 +233,7 @@ describe('store', () => {
   it('export -> import on a clean DB reproduces identical state', async () => {
     const text = await B.exportBackup(sample(), '1.0.0', now);
     expect((await S.importBackup(db, text)).ok).toBe(true);
-    expect(await S.loadPayload(db)).toEqual(sample());
+    const back = await S.loadPayload(db); const { lastImportAt, transferGrace, ...meta } = back.meta; expect(typeof lastImportAt).toBe('string'); expect(transferGrace).toEqual(['2026-10-25', '2026-10-26', '2026-10-27']); expect({ ...back, meta }).toEqual(sample()); // only the import bookkeeping is added
   });
   it('import replaces data, snapshots first, keeps 3 snapshots', async () => {
     await S.replaceAll(db, sample());

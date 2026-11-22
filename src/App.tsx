@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { audio, applyMusicSource, installAudioLifecycle, prefsFromSettings } from './audio';
 import { CinematicHost } from './cinematics/CinematicHost';
+import { PwaBanner } from './pwa/PwaBanner';
+import { ReminderBanner } from './storage/ReminderBanner';
+import { autosaveIfDue, autosaveSupported, loadAutosaveHandle } from './storage/autosave';
+import { timerViews } from './timer/timer';
+import { todayKey } from './app/actions';
 import { effectiveTier } from './cinematics/model';
 import { playerView } from './app/selectors';
 import { runDayClose } from './app/actions';
@@ -29,6 +34,8 @@ export function App({ db }: { db: SlsDb }) {
   const sync = useCallback(async () => { try { const c = await startupCheck(db); if (!c.fresh && !c.errors.length) await runDayClose(db, new Date()); } catch { /* surfaced by load() */ } await load(); }, [db, load]);
   useEffect(() => { void sync(); }, [sync]);
   const ready = state.kind === 'ready';
+  const dayForSave = state.kind === 'ready' ? todayKey(state.payload, new Date()) : '';
+  useEffect(() => { if (!ready || !autosaveSupported()) return; void loadAutosaveHandle().then((h) => autosaveIfDue(db, h, dayForSave)).catch(() => undefined); }, [ready, dayForSave, db]); // once per game day, only with permission already granted
   useEffect(() => {
     if (!ready) return; const i = setInterval(() => void sync(), 30_000); const v = () => { if (document.visibilityState === 'visible') void sync(); };
     document.addEventListener('visibilitychange', v); return () => { clearInterval(i); document.removeEventListener('visibilitychange', v); };
@@ -50,6 +57,8 @@ export function App({ db }: { db: SlsDb }) {
   const props = { db, payload: p, refresh: load };
   return (
     <Shell player={<>{`${pv.name} | Rank ${pv.rank} | Level ${pv.level}`} <MusicToggle allowed={prefsFromSettings(p.settings).musicEnabled} /></>} nav={<Nav current={dest} onNavigate={setDest} />}>
+      <PwaBanner timerRunning={timerViews(p, new Date()).some((v) => v.status === 'running')} />
+      <ReminderBanner db={db} payload={p} refresh={load} onOpenSettings={() => setDest('settings')} />
       <CinematicHost db={db} payload={p} refresh={load} tier={tier} />
       <h1>{current.label}</h1>
       {dest === 'quests' && <QuestsScreen {...props} />}

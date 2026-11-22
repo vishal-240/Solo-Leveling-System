@@ -1,6 +1,7 @@
 # Implementation notes (Solo Leveling System PWA, Spec v1.0 frozen)
 
 ## Decisions taken where the spec is silent or ambiguous
+
 - **Undo vs. level invariant (P4/P5).** Completion can be undone for 2 minutes via reversal entries, once per occurrence. The frozen rule that
   levels and ranks never decrease (3.7) takes precedence: an undo that would drop the player below the start of the current level is refused
   (`UNDO_BLOCKED`), even inside the window. Undo that stays inside the current level works, and re-completion never repeats rewards. No new mechanic
@@ -16,21 +17,24 @@
 - **Reward events are derived from the ledger** and applied by an idempotent reconciler (`syncProgressionInPlace`) after every award, undo and day close.
 
 ## P5 acceptance mapping
-| Requirement | Evidence |
-|---|---|
-| Floor-limited deductions, per tier | `scenarios.test.ts` deduction and floor rows |
+
+| Requirement                                                | Evidence                                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| Floor-limited deductions, per tier                         | `scenarios.test.ts` deduction and floor rows                 |
 | Penalty quests: triggers, non-stacking, completion, expiry | penalty rows (P3 behaviour exercised through the P5 harness) |
-| Daily/per-quest streaks, shields, D17 overflow | streak and shield rows |
-| Rest-day and paused exemptions | rest-day and paused rows |
-| Level and rank events; 174 points; 12 shield grants | level-crossing and full-run rows |
-| Allocation modes, respec, equip | allocation rows |
-| Attribute titles and messages at 10/25/50 | `attributes.test.ts` |
-| Idempotency; undo/re-completion consistency | scenario and attribute tests |
+| Daily/per-quest streaks, shields, D17 overflow             | streak and shield rows                                       |
+| Rest-day and paused exemptions                             | rest-day and paused rows                                     |
+| Level and rank events; 174 points; 12 shield grants        | level-crossing and full-run rows                             |
+| Allocation modes, respec, equip                            | allocation rows                                              |
+| Attribute titles and messages at 10/25/50                  | `attributes.test.ts`                                         |
+| Idempotency; undo/re-completion consistency                | scenario and attribute tests                                 |
 
 ## P5 checkpoint — not verified at that checkpoint
+
 At the P5 checkpoint, real-browser behaviour, installed-PWA behaviour, offline use and the GitHub Pages workflow had not yet been verified, and no screens existed yet. The newer P6 browser evidence and current deployment status are documented below.
 
 ## P6 - Visual system and onboarding (branch `p6-visual-onboarding`)
+
 Built: design tokens (`src/ui/tokens.css`), reusable components (`src/ui/components.tsx`: Panel, SystemMessage, Nav, Shell, Field), responsive shell (bottom nav under 768 px, left rail above),
 Player Awakening (`src/onboarding/*`: model, atomic idempotent `registerPlayer`, step UI) and `App.tsx` (loading, error, onboarding, ready shell).
 Decisions where the spec is silent: no starter quests are preselected (skipping gives zero quests); skip restores that step's defaults; the draft is kept in `localStorage`
@@ -39,20 +43,27 @@ because the spec defines no configurable options for them; the shell header show
 "Not yet implemented" (P7/P8). Attribute goals are stored as an extra `goal` field on attribute rows; the optional starting title as `player.startingTitle`.
 
 ### Verified here (automated, jsdom + axe-core)
+
 Onboarding end to end (validation, skip, resume after reload, corrupt draft, confirmation, double submit, no duplicate registration), axe (serious/critical = none) on every step, the
 confirmation and the shell, keyboard navigation, skip link, focus moved to the step heading, System-message roles, effects tier attribute, token contrast (computed from the CSS).
+
 ### Real-browser verification (branch `p6-browser-verification`)
+
 A Chromium 131 binary was obtained from the npm package `@sparticuz/chromium` (Playwright's own download host is blocked in the build environment) and driven with `playwright-core`; `tests/browser/browser.test.ts`
 (`npm run test:browser`, outside `npm test`) passed 8/8 against the production build. At 360 px and 1440 px it checks: horizontal overflow, clipped text, overlapping and obscured controls, 44 px targets,
 navigation versus content geometry, axe with colour contrast enabled, keyboard focus order/visibility/outline, focus moving to the step heading, reduced motion, and a service-worker/offline-reload probe.
 **Defect found and fixed:** the four-item bottom navigation overflowed a 360 px viewport. Tests wait for entry animations to finish before measuring (a fading panel has partial opacity and fails contrast otherwise).
+
 ### Still not verified
+
 Firefox/WebKit/mobile browsers, real devices, PWA installation, device lock and offline beyond the localhost probe. P6 was subsequently confirmed visually on GitHub Pages; this P7 checkpoint has not yet been deployed.
 
 ## P7 - Core screens (branch `p7-core-screens`)
+
 Built from the supplied P6 checkpoint (no Git history in the ZIP; a local baseline commit was created and the remote was not touched). Screens live in `src/screens/*`, the thin atomic action layer in `src/app/actions.ts`,
 ledger-derived read models in `src/app/selectors.ts`; business rules stay in the existing domain/timer/rewards/persistence modules.
 Decisions where the spec is silent:
+
 - **Quick create** makes a one-off for today (or a daily recurring quest with "Repeat"). **Timed quests must repeat**, because the existing one-off model supports difficulty only; the form says so.
 - **Edit, pause, resume and remove take effect from tomorrow** (effective-dated template versions), so today's generated occurrence is never rewritten; the UI states this.
 - **Undo** is offered for 2 minutes after completion but hidden, with an explanation, when reversing it would remove a level already reached (the P5 `UNDO_BLOCKED` rule). The player's first-ever completion reaches level 2 at 50 XP, so it cannot be undone.
@@ -62,34 +73,100 @@ Decisions where the spec is silent:
 - **Day close** runs on open, on tab visibility and every 30 s; its System message now states the real quest count ("no quests are scheduled" when there are none); the onboarding confirmation says "NO QUESTS YET" when none were created.
 - **Test clock:** the end-to-end rollover test installs a Date shim from the test (localStorage-backed); no clock override exists in production code.
 - **Accessibility fix found by tests:** schedule buttons are named "Pause schedule of X" so they cannot be confused with the timer's "Pause X".
-Real-browser defects found and fixed in P7: the Settings page overflowed a 360 px viewport (file input intrinsic width). The overlap check ignores content scrolling beneath the fixed bottom navigation (checked separately by the obscured-control test).
-Known limitations: History is a placeholder; no audio or cinematics; real-time 15-minute timer blocks are unit-tested with a fake clock but not waited out in a browser; Chromium-only browser evidence; installability, devices and Pages deployment unverified.
+  Real-browser defects found and fixed in P7: the Settings page overflowed a 360 px viewport (file input intrinsic width). The overlap check ignores content scrolling beneath the fixed bottom navigation (checked separately by the obscured-control test).
+  Known limitations: History is a placeholder; no audio or cinematics; real-time 15-minute timer blocks are unit-tested with a fake clock but not waited out in a browser; Chromium-only browser evidence; installability, devices and Pages deployment unverified.
 
 ## P8 - History and analytics (branch `p8-history-analytics`)
+
 Built from the deployed P7 checkpoint (no Git history in the ZIP; a local baseline commit was created and the remote was not touched). Read models are pure functions in `src/history/history.ts`
 (unit-tested against a real-domain fixture, `src/history/testFixture.ts`); the UI is `src/screens/HistoryScreen.tsx`. Nothing is stored for history: every view is derived from the ledger, occurrences, day records and event records.
 Decisions where the spec is silent:
+
 - **Day status** is derived from occurrence outcomes: all completed = clear; completed plus missed/partial/lapsed = mixed; none completed with misses = missed; the day-record rest flag = rest; open quests = in progress; days after today and days with no records are "no data", never missed.
 - **Chart values are net XP** (earned, with undone completions netted out, minus deductions) so the buckets always sum to the player ledger total. Earned, deducted and forfeited are shown in the data table. Weeks start on the configured week start (Monday by default). The chart draws the last 12 periods and reports the XP from earlier periods.
 - **Completion rate** = completed ÷ (completed + missed + partially banked + lapsed) over processed days; exempt, skipped, open, penalty and future quests are excluded, and so is the rest-day affordance quest when it lapses (the spec says a protected rest day must never count against you).
 - **Deductions** are applied equally to Player and attribute XP but limited by the stricter level floor, so the applied amount can be smaller than requested; the log and ledger say so. The Penalties log lists each player-scope deduction once (the attribute mirror is not listed) plus penalty-quest triggers.
 - **System log** lists one entry per persisted record; level and rank events come from their own records, so the redundant LEVEL UP / RANK PROMOTION notifications are not listed again. Event times are shown in the configured timezone (the current setting, even for events recorded under an earlier policy).
 - **Month navigation** stops at the first month with data and the current month; "streak history" is limited to the stored current/longest values.
-Real-browser defects found and fixed in P8: calendar day buttons were 43 px wide at 360 px (now 44 px+, with smaller panel padding on narrow screens); the selected-day style overrode the focus ring (now a box-shadow); visible button text was not contained in the accessible name (WCAG label-in-name; the calendar and month buttons now use matching names); and the daily-loop tests waited on the header date instead of on day close finishing (a race, now waits for the generated quest).
-Known limitations: Chromium-only browser evidence; no export of history; long ledgers/logs are paged 50 at a time; installability, devices and Pages deployment unverified.
+  Real-browser defects found and fixed in P8: calendar day buttons were 43 px wide at 360 px (now 44 px+, with smaller panel padding on narrow screens); the selected-day style overrode the focus ring (now a box-shadow); visible button text was not contained in the accessible name (WCAG label-in-name; the calendar and month buttons now use matching names); and the daily-loop tests waited on the header date instead of on day close finishing (a race, now waits for the generated quest).
+  Known limitations: Chromium-only browser evidence; no export of history; long ledgers/logs are paged 50 at a time; installability, devices and Pages deployment unverified.
 
 ## P9 - Audio and cinematics (branch `p9-audio-cinematics`)
+
 Built from the deployed P8 checkpoint (no Git history in the ZIP; a local baseline commit was created and the remote was not touched).
 **Audio asset provenance and licensing:** there are no third-party audio assets. Every cue and the ambient loop are generated at runtime from oscillators in `src/audio/engine.ts` (original work, same licence as the project). The optional user music file is the player's own file, kept in the browser only. Nothing is streamed, tracked or fetched; no service, key or account is used. Total added bundle weight is a few KB.
 **Decisions where the spec is silent:**
-- **Playback state:** `meta.seenEvents` (sorted event ids: `level:N`, `rank:X`, `ach:id`) is the acknowledgement list. Ids are acknowledged when the cinematic is *presented*, not when dismissed: this is the conservative choice against duplicate playback, at the cost that an app closed mid-animation does not replay it (the events remain in the System log and Status). Existing data without the list is baselined silently on first load, so nothing historical plays. Restoring a backup restores the list.
+
+- **Playback state:** `meta.seenEvents` (sorted event ids: `level:N`, `rank:X`, `ach:id`) is the acknowledgement list. Ids are acknowledged when the cinematic is _presented_, not when dismissed: this is the conservative choice against duplicate playback, at the cost that an app closed mid-animation does not replay it (the events remain in the System log and Status). Existing data without the list is baselined silently on first load, so nothing historical plays. Restoring a backup restores the list.
 - **Order and batching:** events are ordered by level; consecutive ordinary levels are one "LEVEL UP" step ("Levels 2 to 3 (2 levels)"), a rank promotion is its own step (own colour and ring count per rank; S adds a shimmer), achievements are banners.
 - **Tiers:** Full = animated dialog; Reduced = identical readable dialog with no motion or rings; Minimal = no dialog, text banners. `prefers-reduced-motion` downgrades Full to Reduced. Sound is controlled independently of the tier (mute/volumes).
 - **Autoplay:** the AudioContext is created in a capture-phase `pointerdown`/`keydown`/`touchend` handler. Music never auto-starts or resumes; the player presses Play music each session. The Settings "Allow ambient music" checkbox only permits it.
 - **Music file storage:** a second small IndexedDB database, not the player data, so no schema/version change and no large blobs in backups (documented in the UI).
 - **Silencing rules:** a cue is skipped when muted, master or effects volume is 0, the tab is hidden, the same cue repeats within 60 ms or 8 voices are active.
 - **Shell inertness:** the dialog is portalled to `document.body`; the app shell is `inert`/`aria-hidden` while it is open.
-**Latent defect fixed (P2 invariant):** the "level never decreases" check ordered same-timestamp level events by stored order; IndexedDB returns rows by text id order, so `level:10` precedes `level:2`, and a multi-level award crossing level 10 would have made every later write fail with "level decreased over time". The check now orders by timestamp then level; regression tests cover the round trip and still catch genuine decreases.
-Other fixes found by tests: opener focus was the page body (dialog now returns focus to the page content when the opener is gone), an effect that closed the dialog in the same commit that opened it, and acknowledgement races in tests.
-Test-only instrumentation: browser tests wrap `AudioContext`/`OscillatorNode.start` in an init script to count constructions and starts; they cannot hear or measure sound.
-Known limitations: sound quality is unverified by ear or by measurement; frame-time on a mid-range phone is unmeasured (animations use only transform/opacity and a handful of elements); Chromium-only browser evidence; no sound-toggle in the onboarding; the user music file is not exported with backups; Safari/iOS audio unlocking is untested; backup reminders, storage status and release hardening (P10) are not done.
+  **Latent defect fixed (P2 invariant):** the "level never decreases" check ordered same-timestamp level events by stored order; IndexedDB returns rows by text id order, so `level:10` precedes `level:2`, and a multi-level award crossing level 10 would have made every later write fail with "level decreased over time". The check now orders by timestamp then level; regression tests cover the round trip and still catch genuine decreases.
+  Other fixes found by tests: opener focus was the page body (dialog now returns focus to the page content when the opener is gone), an effect that closed the dialog in the same commit that opened it, and acknowledgement races in tests.
+  Test-only instrumentation: browser tests wrap `AudioContext`/`OscillatorNode.start` in an init script to count constructions and starts; they cannot hear or measure sound.
+  Known limitations: sound quality is unverified by ear or by measurement; frame-time on a mid-range phone is unmeasured (animations use only transform/opacity and a handful of elements); Chromium-only browser evidence; no sound-toggle in the onboarding; the user music file is not exported with backups; Safari/iOS audio unlocking is untested; backup reminders, storage status and release hardening (P10) are not done.
+
+## P10 — Release hardening (candidate; local verification passed)
+
+### Implemented
+
+- Toolchain upgraded to Vite 7, Vitest 5, React plugin 5 and vite-plugin-pwa 2; Node engine floor is `>=20.19`. GitHub Actions use `checkout@v5`, `setup-node@v5`, `upload-pages-artifact@v5` and `deploy-pages@v5`.
+- PWA manifest and platform icons; Workbox precaching, navigation fallback and cache cleanup; install prompt capture; update prompt; offline-ready and registration-error messages.
+- Settings panels for backup preview, backup reminder interval, storage usage/quota and persistence, install/offline instructions, and cache recovery.
+- Backup reminder due logic covers configured intervals and rank promotions, with a one-day snooze. Reminder is in-app only, consistent with the no-browser-notification constraint.
+- Optional Chromium desktop file auto-save writes at most once per game day and only when a previously granted permission is already available. It does not prompt automatically. The file handle is stored separately from player data.
+- Restore is available from Player Awakening for a clean browser/new device. Import keeps a pre-import snapshot, validates before replacement, applies D16 transfer grace, and restores without merging.
+- Friendly storage errors distinguish quota, blocked/closed storage and a newer database schema.
+- `mutatePayload` fingerprints rows, validates changed rows, and writes only changed rows while retaining cross-table reference/invariant checks and cache repair.
+- Large-data fixture and performance tests cover about 3 years (5,475 occurrences, 10,950 ledger rows).
+- Cache recovery is scoped to the current app's service-worker registration and `sls-system-` cache entries, preserving unrelated registrations and caches on a shared origin.
+- PWA update-check intervals are cleared by lifecycle cleanup and test reset.
+
+### Local verification — user-run candidate
+
+The user ran the following checks locally against the extracted P10 candidate:
+
+| Check                                              | Result                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| `npm run typecheck`                                | Passed                                                       |
+| `npm test`                                         | 301 tests passed across 23 files                             |
+| `npm run build`                                    | Passed                                                       |
+| `npx vitest run --config vitest.browser.config.ts` | 42 tests passed                                              |
+| `npm audit --omit=dev`                             | 0 vulnerabilities                                            |
+| `npm audit`                                        | 4 moderate vulnerabilities in development/build dependencies |
+
+The Chromium browser suite covers 360, 390, 768 and 1440 px layouts, onboarding, keyboard navigation, accessibility checks, populated screens, history, the daily loop, audio autoplay safeguards, cinematics, effects tiers, manifest/icons, offline use, deployment updates, broken-release recovery, backup/wipe/restore, reminders, timer throttling and large-history performance.
+
+Large-history browser test (5,475 quests, 10,950 ledger rows; approximately 5.8 MB backup) measured:
+
+| Operation      | Observed time |
+| -------------- | ------------: |
+| Backup preview |        243 ms |
+| Restore        |      6,206 ms |
+| Charts         |        307 ms |
+| XP ledger      |        100 ms |
+| System log     |        276 ms |
+| Achievements   |        101 ms |
+| Calendar       |        274 ms |
+| Create quest   |      1,032 ms |
+
+These measurements are from the user's Chromium test environment and are not mobile-device benchmarks.
+
+### Audit and build notes
+
+- Production dependency audit (`npm audit --omit=dev`): zero vulnerabilities.
+- Full dependency audit: four moderate findings involving `glob` and `minimatch`, pulled in through `workbox-build` and `vite-plugin-pwa`.
+- The suggested `npm audit fix --force` would downgrade `vite-plugin-pwa` to 1.1.0 and introduce a breaking change. It was not applied.
+- The production build succeeds. Vite reports Zod dependency annotation warnings, a mixed static/dynamic import warning for `backup.ts`, and a 509.12 kB main JavaScript chunk (158.68 kB gzip), slightly above the 500 kB warning threshold.
+- Unit tests produce jsdom warnings for unimplemented media pause and canvas context APIs. The unreadable-history-data test intentionally exercises the error boundary and passes.
+
+### Outstanding before P10 acceptance
+
+1. Run the updated GitHub Actions deployment workflow on the user's remote repository and inspect the actual run.
+2. Manually test installation, offline launch, update, data retention, backup export/restore and timer behaviour on Windows Chrome/Edge, Android Chrome and iOS Safari.
+3. Verify the final clean ZIP contains the intended source, documentation, lockfile and workflow, and excludes `.git`, `node_modules`, `dist` and environment files.
+4. Update the release-status and risk documents with the actual workflow and device-test results.
+5. Only after these checks, mark P10 release-accepted.

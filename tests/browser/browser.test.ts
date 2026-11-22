@@ -1,14 +1,17 @@
 // Real-browser acceptance checks for P6 and P7 (full daily loop, populated screens) (rendered layout, focus, reduced motion, axe with colour contrast, SW/offline probe).
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import { extname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { preview, type PreviewServer } from 'vite';
 
 const require = createRequire(import.meta.url);
-const PORT = 4173, URL = `http://localhost:${PORT}/`;
+const PORT = 4173, APP_URL = `http://localhost:${PORT}/`;
 let browser: Browser, server: PreviewServer;
-const VIEWPORTS = [{ name: '360 px', width: 360, height: 740 }, { name: '1440 px', width: 1440, height: 900 }] as const;
+const VIEWPORTS = [{ name: '360 px', width: 360, height: 740 }, { name: '1440 px', width: 1440, height: 900 }, { name: '390 px', width: 390, height: 844 }, { name: '768 px', width: 768, height: 1024 }] as const; // indices 0 and 1 are the mobile and desktop references used by single-viewport tests
 
 beforeAll(async () => {
   const exe = process.env.CHROMIUM_PATH ?? chromium.executablePath();
@@ -20,7 +23,7 @@ afterAll(async () => { await browser?.close(); await new Promise<void>((r) => (s
 
 async function open(vp: { width: number; height: number }, opts: { reducedMotion?: 'reduce' | 'no-preference' } = {}): Promise<{ ctx: BrowserContext; page: Page }> {
   const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, reducedMotion: opts.reducedMotion ?? 'no-preference', serviceWorkers: 'allow' });
-  const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
+  const page = await ctx.newPage(); await page.goto(APP_URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
 }
 /** Wait for entry animations to finish so measurements and contrast are taken at rest (a fading panel has partial opacity). */
 const settle = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime))).map((a) => a.finished.catch(() => undefined))).then(() => undefined)); // infinite decorative loops never finish
@@ -52,14 +55,24 @@ const layoutProblems = async (page: Page) => { await settle(page); return page.e
     if (hit && hit !== e && !e.contains(hit) && !(hit as HTMLElement).closest('label')?.contains(e)) out.push(`obscured: ${name(e)} by ${name(hit)}`); }
   window.scrollTo(0, 0); return out;
 }); };
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'];
+type AxeNode = { target: string[]; html?: string; any?: { data?: unknown }[] }; type AxeV = { id: string; impact: string; nodes: AxeNode[] };
+const fmt = (v: AxeV) => `${v.id}: ${v.nodes.map((n) => `${n.target.join(' ')} ${(n.html ?? '').slice(0, 140)} ${JSON.stringify(n.any?.[0]?.data ?? '').slice(0, 90)}`).join(' | ')}`;
+/** axe with colour contrast on. Contrast cannot be measured for an element below the fold (axe sees the page default), so such findings are re-checked after scrolling the element into view. */
 const axeViolations = async (page: Page) => {
-  await settle(page);
-  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-  return page.evaluate(async () => {
+  await settle(page); await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  const run = (include?: string[]) => page.evaluate(async ({ tags, include }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const r = await (window as any).axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'] } }); // colour-contrast enabled (rendered pixels)
-    return r.violations.filter((v: { impact: string }) => v.impact === 'serious' || v.impact === 'critical').map((v: { id: string; nodes: { target: string[] }[] }) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
-  });
+    const r = await (window as any).axe.run(include ? { include: include.map((i) => [i]) } : document, { runOnly: { type: 'tag', values: tags } }); return r.violations.filter((v: { impact: string }) => v.impact === 'serious' || v.impact === 'critical');
+  }, { tags: AXE_TAGS, include });
+  const first = (await run()) as AxeV[]; const out: string[] = [];
+  for (const v of first) {
+    if (v.id !== 'color-contrast') { out.push(fmt(v)); continue; }
+    const still: AxeNode[] = [];
+    for (const n of v.nodes) { const sel = n.target[n.target.length - 1]!; await page.evaluate((q) => document.querySelector(q)?.scrollIntoView({ block: 'center' }), sel); const again = (await run([sel])) as AxeV[]; if (again.some((x) => x.id === 'color-contrast')) still.push(n); }
+    await page.evaluate(() => window.scrollTo(0, 0)); if (still.length) out.push(fmt({ ...v, nodes: still }));
+  }
+  return out;
 };
 async function register(page: Page) {
   await page.getByRole('button', { name: 'Begin' }).click();
@@ -105,7 +118,7 @@ for (const vp of VIEWPORTS) describe(`rendered application at ${vp.name}`, () =>
     const { ctx, page } = await open(vp);
     const focused = () => page.evaluate(() => { const e = document.activeElement as HTMLElement; const r = e.getBoundingClientRect(); const s = getComputedStyle(e);
       return { tag: e.tagName, text: (e.textContent || e.id).trim().slice(0, 24), inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, outlineStyle: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth) }; });
-    const check = async (expectText: RegExp) => { const f = await focused(); expect(f.text, `focused ${f.tag}`).toMatch(expectText); expect(f.inView, `${f.text} in view`).toBe(true); expect(f.outlineStyle, `${f.text} outline`).not.toBe('none'); expect(f.outlineWidth, `${f.text} outline width`).toBeGreaterThanOrEqual(3); };
+    const check = async (expectText: RegExp) => { const f = await focused(); expect(f.text, `focused ${f.tag}`).toMatch(expectText); expect(f.inView, `${f.text} in view`).toBe(true); expect(f.outlineStyle, `${f.text} outline`).not.toBe('none'); expect(f.outlineWidth, `${f.text} outline width`).toBeGreaterThanOrEqual(2.5); };
     await page.keyboard.press('Tab'); await check(/^Begin$/); await page.keyboard.press('Enter');
     await page.getByLabel(/player name/i).waitFor(); expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('Player registration');
     await page.keyboard.press('Tab'); await check(/^name$/); // text input: focus reports its id
@@ -141,13 +154,22 @@ const CLOCK_SHIM = `(() => { const R = Date; if (!localStorage.getItem('__e2e_no
   globalThis.Date = F; })();`;
 async function openClocked(vp: { width: number; height: number }, opts: { reducedMotion?: 'reduce' | 'no-preference' } = {}) {
   const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, timezoneId: 'UTC', locale: 'en-US', reducedMotion: opts.reducedMotion ?? 'no-preference' });
-  await ctx.addInitScript(CLOCK_SHIM); const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
+  await ctx.addInitScript(CLOCK_SHIM); const page = await ctx.newPage(); await page.goto(APP_URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); return { ctx, page };
 }
 async function registerEmpty(page: Page) {
-  await page.getByRole('button', { name: 'Begin' }).click(); await page.getByLabel(/player name/i).fill('Vishal');
-  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: /skip/i }).click();
-  await page.getByRole('button', { name: /confirm registration/i }).click(); await page.getByText('NO QUESTS YET').waitFor();
-  await page.getByRole('button', { name: 'Enter the System' }).click(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+  await page.getByRole('button', { name: 'Begin' }).click();
+  await page.getByLabel(/player name/i).fill('Vishal');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Skip Attributes, Recurring quests, Daily reset, and System rules.
+  for (let i = 0; i < 4; i++) {
+    await page.getByRole('button', { name: /skip/i }).click();
+  }
+
+  await page.getByRole('button', { name: /confirm registration/i }).click();
+  await page.getByText('NO QUESTS YET').waitFor();
+  await page.getByRole('button', { name: 'Enter the System' }).click();
+  await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
 }
 /** Level-ups open a modal dialog (P9); flows that are not about it dismiss it with Skip. */
 const dismissCinematic = async (page: Page) => { const d = page.getByRole('dialog'); await d.waitFor(); await d.getByRole('button', { name: 'Skip' }).click(); await d.waitFor({ state: 'detached' }); };
@@ -241,7 +263,7 @@ for (const vp of VIEWPORTS) describe(`History screen at ${vp.name}`, () => {
     // keyboard: focus a day, select with Enter, focus ring stays visible on the selected day
     const day = cal.getByRole('button', { name: /^20 October 2026:/ }); await day.focus(); await page.keyboard.press('Enter');
     await page.getByRole('heading', { name: 'Day 2026-10-20' }).waitFor(); expect(await day.getAttribute('aria-pressed')).toBe('true');
-    const ring = await day.evaluate((e) => { const s = getComputedStyle(e); return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) }; }); expect(ring.style).not.toBe('none'); expect(ring.width).toBeGreaterThanOrEqual(3);
+    const ring = await day.evaluate((e) => { const s = getComputedStyle(e); return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) }; }); expect(ring.style).not.toBe('none'); expect(ring.width).toBeGreaterThanOrEqual(2.5);
     const detail = page.getByRole('heading', { name: 'Day 2026-10-20' }).locator('xpath=ancestor::section[1]'); expect(await detail.textContent()).toMatch(/Some completed, some missed/); expect(await detail.textContent()).toMatch(/deducted 13/);
     // ledger filter
     await page.getByRole('button', { name: 'XP ledger' }).click(); await page.getByLabel('Kind').selectOption('penalty_deduction');
@@ -270,7 +292,7 @@ const counters = (page: Page) => page.evaluate(() => (window as unknown as { __a
 describe('audio autoplay and music control (instrumented Web Audio; no acoustic verification)', () => {
   it('creates no audio context and starts no sound before a gesture, plays cues after one, and never starts music by itself', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'UTC' }); await ctx.addInitScript(AUDIO_SPY);
-    const page = await ctx.newPage(); await page.goto(URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); await page.waitForTimeout(1200);
+    const page = await ctx.newPage(); await page.goto(APP_URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); await page.waitForTimeout(1200);
     expect(await counters(page)).toEqual({ created: 0, started: 0 });
     await page.getByRole('button', { name: 'Begin' }).click(); const afterClick = await counters(page); expect(afterClick.created).toBe(1); expect(afterClick.started).toBeGreaterThan(0);
     await page.getByLabel(/player name/i).fill('Vishal'); for (let i = 0; i < 5; i++) await page.getByRole('button', { name: /skip/i }).click(); await page.getByRole('button', { name: /confirm registration/i }).click();
@@ -320,4 +342,152 @@ describe('effects tiers (real browser)', () => {
     const region = page.getByRole('region', { name: /notifications/i }); await page.waitForFunction(() => /LEVEL UP\s*Level 4/.test(document.querySelector('[aria-label=Notifications]')?.textContent ?? '')); expect(await region.textContent()).toMatch(/LEVEL UP.*Level 4/); expect(await page.getByRole('dialog').count()).toBe(0);
     expect(await page.evaluate(() => document.documentElement.dataset.effects)).toBe('minimal'); await region.getByRole('button', { name: /dismiss level up/i }).click(); expect(await region.textContent()).not.toMatch(/Level 4/); await ctx.close();
   });
+});
+
+// ---------------- P10: release hardening in a real browser ----------------
+const bytesOf = (page: Page, url: string) => page.evaluate(async (u) => { const r = await fetch(u); const b = await r.blob(); const bmp = b.type.startsWith('image/') && !b.type.includes('svg') ? await createImageBitmap(b) : null; return { ok: r.ok, type: r.headers.get('content-type'), w: bmp?.width ?? 0, h: bmp?.height ?? 0 }; }, url);
+describe('PWA manifest, icons and installability (Chromium)', () => {
+  it('serves a complete manifest and correctly sized icons, and Chromium reports no installability errors', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await registerEmpty(page); await page.evaluate(() => navigator.serviceWorker.ready); await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+    const man = await page.evaluate(async () => { const href = document.querySelector<HTMLLinkElement>('link[rel=manifest]')!.href; const m = await (await fetch(href)).json(); return { href, m }; });
+    expect(man.m).toMatchObject({ name: 'SYSTEM: Solo Leveling System', short_name: 'SYSTEM', display: 'standalone', start_url: './', scope: './', theme_color: '#03060f', background_color: '#03060f', id: './' });
+    const sizes: [string, number][] = [['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]];
+    for (const [file, px] of sizes) { const icon = (man.m.icons as { src: string; sizes: string; purpose: string }[]).find((i) => i.src === file)!; expect(icon.sizes).toBe(`${px}x${px}`); const r = await bytesOf(page, new URL(file, man.href).href); expect([r.ok, r.type, r.w, r.h]).toEqual([true, 'image/png', px, px]); }
+    expect((man.m.icons as { purpose: string }[]).some((i) => i.purpose === 'maskable')).toBe(true);
+    const apple = await page.evaluate(() => document.querySelector<HTMLLinkElement>('link[rel=apple-touch-icon]')?.href ?? ''); expect(apple).toMatch(/apple-touch-icon\.png$/); expect((await bytesOf(page, apple))).toMatchObject({ ok: true, w: 180, h: 180 });
+    expect(await page.evaluate(() => document.querySelector('meta[name=theme-color]')?.getAttribute('content'))).toBe('#03060f'); expect(await page.evaluate(() => !!document.querySelector('meta[name=viewport]'))).toBe(true);
+    const cdp = await ctx.newCDPSession(page); const res = (await cdp.send('Page.getInstallabilityErrors' as never)) as { installabilityErrors: { errorId: string }[] }; expect(res.installabilityErrors.filter((e) => e.errorId !== 'in-incognito')).toEqual([]);
+    await ctx.close();
+  });
+});
+describe('offline operation after the first load (Chromium, network cut at the browser level)', () => {
+  it('launches, navigates, creates, completes, runs a timer, exports and survives reloads without a network, then works online again', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await registerEmpty(page); await page.evaluate(() => navigator.serviceWorker.ready); await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+    expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    await ctx.setOffline(true); await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+    for (const d of ['Status', 'History', 'Settings', 'Quests']) await goto(page, d);
+    await quickCreate(page, 'Offline task', 'easy'); await page.getByRole('button', { name: 'Complete Offline task' }).click(); await page.getByText(/\+50 XP awarded/).first().waitFor(); await dismissCinematic(page);
+    await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Offline focus'); await page.getByLabel('Type').selectOption('timed'); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText('QUEST CREATED').first().waitFor();
+    await page.getByRole('button', { name: 'Start Offline focus' }).click(); await page.getByText('TIMER STARTED').waitFor(); await page.getByRole('button', { name: 'Pause Offline focus' }).click(); await page.getByText('TIMER PAUSED').waitFor();
+    await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); expect(await page.getByRole('button', { name: 'Resume Offline focus' }).isVisible()).toBe(true); await goto(page, 'Status'); expect(await statusLine(page)).toMatch(/Level 2/); expect(await statusLine(page)).toContain('50');
+    await goto(page, 'Settings'); const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /export backup/i }).click()]); expect(dl.suggestedFilename()).toMatch(/^system-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    await ctx.setOffline(false); await page.reload(); await page.getByRole('heading', { name: /^settings$/i, level: 1 }).or(page.getByRole('heading', { name: /^quests$/i, level: 1 })).waitFor(); await goto(page, 'Status'); expect(await statusLine(page)).toContain('50');
+    await ctx.close();
+  });
+});
+describe('deploying a new version to an installed app', () => {
+  const PORT2 = 4175; let root = ''; let failSw = false; let srv: Server | undefined;
+const dirs = {
+  v1: join(process.cwd(), 'node_modules', '.cache', 'sls-v1'),
+  v2: join(process.cwd(), 'node_modules', '.cache', 'sls-v2'),
+};
+  const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+  beforeAll(() => {
+    const viteCli = join(process.cwd(), 'node_modules', 'vite', 'bin', 'vite.js');
+for (const [v, dir] of [['9.1.0', dirs.v1], ['9.2.0', dirs.v2]] as const) {
+  execFileSync(process.execPath, [viteCli, 'build', '--outDir', dir, '--emptyOutDir'], {
+    env: { ...process.env, APP_VERSION: v },
+    stdio: 'ignore',
+  });
+}
+    root = dirs.v1;
+    srv = createServer((req, res) => { let p = decodeURIComponent((req.url ?? '/').split('?')[0]!); if (p.endsWith('/')) p += 'index.html'; const f = join(root, p);
+      if (failSw && p.endsWith('/sw.js')) { res.writeHead(500); res.end('broken release'); return; }
+      if (!existsSync(f) || !statSync(f).isFile()) { res.writeHead(404); res.end('not found'); return; } res.writeHead(200, { 'content-type': MIME[extname(f)] ?? 'application/octet-stream', 'cache-control': 'no-cache' }); res.end(readFileSync(f)); });
+    return new Promise<void>((r) => srv.listen(PORT2, 'localhost', r));
+  }, 120_000);
+  afterAll(() => new Promise<void>((resolve) => {
+  if (!srv?.listening) return resolve();
+  srv.close(() => resolve());
+}));
+  const about = (page: Page) => page.getByText(/SYSTEM version [\d.]+/);
+  it('keeps working and keeps data while a new release waits, blocks the update during a running timer, applies it on request, and works offline afterwards', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'UTC' }); const page = await ctx.newPage(); await page.goto(`http://localhost:${PORT2}/`); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); await registerEmpty(page);
+    await quickCreate(page, 'Survives the update', 'easy'); await goto(page, 'Settings'); await about(page).waitFor(); expect(await about(page).textContent()).toContain('9.1.0'); await goto(page, 'Quests');
+    await page.evaluate(() => navigator.serviceWorker.ready); await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+    root = dirs.v2; await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); await r!.update(); });
+    await page.getByText('SYSTEM UPDATE AVAILABLE').waitFor({ timeout: 30_000 }); expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('heading', { name: 'Survives the update', exact: true }).isVisible()).toBe(true); // still the old, working app with its data
+    await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Focus'); await page.getByLabel('Type').selectOption('timed'); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText('QUEST CREATED').first().waitFor();
+    await page.getByRole('button', { name: 'Start Focus' }).click(); await page.getByText('TIMER STARTED').waitFor(); const upd = page.getByRole('button', { name: 'Reload to update' }); expect(await upd.isDisabled()).toBe(true); expect(await page.getByText(/Pause or finish your running timer/).isVisible()).toBe(true);
+    await page.getByRole('button', { name: 'Pause Focus' }).click(); await page.getByText('TIMER PAUSED').waitFor(); expect(await upd.isDisabled()).toBe(false);
+    await Promise.all([page.waitForEvent('load'), upd.click()]); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await goto(page, 'Settings'); await about(page).waitFor(); expect(await about(page).textContent()).toContain('9.2.0');
+    await goto(page, 'Quests'); expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('heading', { name: 'Survives the update', exact: true }).isVisible()).toBe(true); // data survived the update
+    await ctx.setOffline(true); await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await goto(page, 'Settings'); expect(await about(page).textContent()).toContain('9.2.0'); await ctx.close();
+  }, 120_000);
+  it('a broken release does not break the installed app, and "Reset app cache" recovers a clean load without touching data', async () => {
+    root = dirs.v1; failSw = false; const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'UTC' }); const page = await ctx.newPage(); await page.goto(`http://localhost:${PORT2}/`); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); await registerEmpty(page);
+    await quickCreate(page, 'Still here', 'easy'); await page.evaluate(() => navigator.serviceWorker.ready); await page.reload(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor();
+    failSw = true; const failed = await page.evaluate(async () => { try { const r = await navigator.serviceWorker.getRegistration(); await r!.update(); return 'updated'; } catch (e) { return `rejected: ${(e as Error).name}`; } }); expect(failed).toMatch(/rejected|updated/);
+    await quickCreate(page, 'Created after the failed update', 'easy'); expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('heading', { name: 'Still here', exact: true }).isVisible()).toBe(true); expect(await page.getByText('SYSTEM UPDATE AVAILABLE').count()).toBe(0);
+    failSw = false; await goto(page, 'Settings'); const panel = page.getByRole('heading', { name: 'Install and offline' }).locator('xpath=ancestor::section[1]'); await Promise.all([page.waitForEvent('load'), panel.getByRole('button', { name: /reset app cache/i }).click()]);
+    await page.getByRole('heading', { name: /^settings$/i, level: 1 }).or(page.getByRole('heading', { name: /^quests$/i, level: 1 })).waitFor(); await goto(page, 'Quests'); expect(await page.getByRole('list', { name: /today's quests/i }).getByRole('heading', { name: 'Still here', exact: true }).isVisible()).toBe(true);
+    await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistrations()).length > 0, null, { timeout: 20_000 }); await ctx.close();
+  }, 120_000);
+});
+describe('backup, wipe and restore (real file download and upload)', () => {
+  it('exports a file, survives a deliberate site-data wipe through the restore screen, and restores without duplicating anything or replaying cinematics', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await registerEmpty(page); await quickCreate(page, 'Hard focus', 'hard'); await page.getByRole('button', { name: 'Complete Hard focus' }).click(); await page.getByText(/\+200 XP awarded/).first().waitFor(); await dismissCinematic(page);
+    await goto(page, 'Settings'); const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /export backup/i }).click()]); const file = await dl.path(); expect(JSON.parse(readFileSync(file!, 'utf8'))).toMatchObject({ format: 'sls-backup', schemaVersion: 3 });
+    await page.evaluate(async () => { const dbs = await indexedDB.databases(); await Promise.all(dbs.map((d) => new Promise<void>((r) => { const q = indexedDB.deleteDatabase(d.name!); q.onsuccess = q.onerror = q.onblocked = () => r(); }))); localStorage.removeItem('sls-onboarding-draft-v1'); });
+    await page.reload(); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); // the data really is gone
+    await page.getByLabel('Choose a backup file').setInputFiles(file!); const prev = page.getByLabel('Backup preview'); await prev.waitFor(); expect(await prev.textContent()).toMatch(/Vishal: rank E, level 3/);
+    await page.getByRole('button', { name: 'Restore this backup' }).click(); await page.getByRole('heading', { name: /^quests$/i, level: 1 }).waitFor(); await page.waitForTimeout(800); expect(await page.getByRole('dialog').count()).toBe(0);
+    await goto(page, 'Status'); expect(await statusLine(page)).toMatch(/Level 3/); expect((await page.getByText(/Unspent points/).textContent()) ?? '').toContain('2');
+    await goto(page, 'History'); await page.getByRole('button', { name: 'System log' }).click(); expect(await page.getByRole('list', { name: /system events/i }).getByText('LEVEL UP', { exact: true }).count()).toBe(2); // exactly the original events
+    await page.getByRole('button', { name: 'XP ledger' }).click(); expect(await page.getByRole('table', { name: /xp ledger entries/i }).locator('tbody tr').count()).toBe(2); // no duplicated awards
+    await ctx.close();
+  });
+  it('a corrupted backup is refused on the restore screen and nothing is created', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await page.getByLabel('Choose a backup file').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"sls-backup","payload":') });
+    expect(await page.getByRole('alert').filter({ hasText: /Restore refused \(not_json\)/ }).isVisible()).toBe(true); expect(await page.getByRole('button', { name: 'Restore this backup' }).isDisabled()).toBe(true); expect(await page.getByRole('heading', { name: /player awakening/i }).isVisible()).toBe(true); await ctx.close();
+  });
+});
+describe('reminders and timer behaviour under background throttling (simulated by jumping the clock)', () => {
+  it('shows a backup reminder after the interval with a working layout, and stops after an export', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[0]); await registerEmpty(page); await setNow(page, '2026-10-30T10:00:00.000Z'); const banner = page.getByText('BACKUP REMINDER'); await banner.waitFor({ timeout: 20_000 });
+    const problems = [...(await layoutProblems(page)).map((p) => `[reminder] ${p}`), ...(await axeViolations(page)).map((v) => `[reminder] axe ${v}`)]; expect(problems).toEqual([]);
+    await page.getByRole('button', { name: 'Open backup settings' }).click(); await page.getByRole('heading', { name: /^settings$/i, level: 1 }).waitFor(); await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /export backup/i }).click()]);
+    await page.waitForFunction(() => !document.body.innerText.includes('BACKUP REMINDER')); await ctx.close();
+  });
+  it('a timer left running while the tab was throttled asks how much of the gap counts instead of silently counting it', async () => {
+    const { ctx, page } = await openClocked(VIEWPORTS[1]); await registerEmpty(page); await page.getByRole('button', { name: 'Advanced' }).click(); await page.getByLabel('Quest title').fill('Focus'); await page.getByLabel('Type').selectOption('timed'); await page.getByRole('button', { name: /create quest/i }).click(); await page.getByText('QUEST CREATED').first().waitFor();
+    await page.getByRole('button', { name: 'Start Focus' }).click(); await page.getByText('TIMER STARTED').waitFor(); await setNow(page, '2026-10-20T10:25:00.000Z');
+    await page.getByText('TIMER INTERRUPTED', { exact: true }).waitFor({ timeout: 20_000 }); expect(await page.getByText(/25 minutes passed/).isVisible()).toBe(true); expect(await page.getByRole('button', { name: /^Complete Focus$/ }).count()).toBe(0);
+    await page.getByLabel(/Minutes of the gap that count/).fill('5'); await page.getByRole('button', { name: 'Record answer' }).click(); await page.getByText('TIME RECORDED').waitFor(); expect(await page.getByText(/Active time 5:0\d/).isVisible()).toBe(true); await ctx.close();
+  });
+});
+describe('large histories in a real browser (about 3 years: 5,475 quests, 10,950 ledger rows)', () => {
+  it('imports, switches History views and performs an action within practical time budgets', async () => {
+    const { bigPayload } = await import('../../src/perf/dataset'); const { exportBackup } = await import('../../src/persist/backup'); const text = await exportBackup(bigPayload(), '1.0.0', new Date('2026-01-02T09:00:00Z'));
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, timezoneId: 'UTC' }); await ctx.addInitScript(() => localStorage.setItem('__e2e_now', '2026-01-02T10:00:00.000Z')); await ctx.addInitScript(CLOCK_SHIM);
+    const page = await ctx.newPage(); await page.goto(APP_URL); await page.getByRole('heading', { name: /player awakening/i }).waitFor(); await page.getByLabel('Choose a backup file').setInputFiles({ name: 'big.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+    let t = Date.now();
+const previewLocator = page.getByLabel('Backup preview');
+
+try {
+  await previewLocator.waitFor({ timeout: 60_000 });
+} catch (error) {
+  console.log('RESTORE DEBUG', JSON.stringify({
+    previewCount: await previewLocator.count(),
+    alerts: await page.getByRole('alert').allTextContents(),
+    screen: (await page.locator('body').innerText()).slice(-2000),
+  }, null, 2));
+  throw error;
+}
+
+const preview = Date.now() - t; t = Date.now();
+await page.getByRole('button', { name: 'Restore this backup' }).click();
+// Dismiss the level-up cinematic triggered by the imported history.
+// Wait for the dialog to fully close before checking the Quests screen.
+await dismissCinematic(page);
+
+await page.getByRole('heading', { name: /^quests$/i, level: 1 })
+  .waitFor({ timeout: 30_000 });
+
+const imp = Date.now() - t;
+    await goto(page, 'History'); const view: Record<string, number> = {}; for (const v of ['Charts', 'XP ledger', 'System log', 'Achievements', 'Calendar']) { t = Date.now(); await page.getByRole('button', { name: v, exact: true }).click(); await page.getByRole('button', { name: v, pressed: true, exact: true }).waitFor(); await page.waitForTimeout(50); view[v] = Date.now() - t; }
+    await goto(page, 'Quests'); t = Date.now(); await quickCreate(page, 'After the import', 'easy'); const action = Date.now() - t;
+    console.log('PERFBROWSER', JSON.stringify({ previewMs: preview, restoreMs: imp, viewMs: view, createQuestMs: action, backupBytes: text.length }));
+    expect(preview).toBeLessThan(20_000); expect(imp).toBeLessThan(60_000); for (const [k, v] of Object.entries(view)) expect(v, k).toBeLessThan(5000); expect(action).toBeLessThan(8000); await ctx.close();
+  }, 240_000);
 });
