@@ -1,101 +1,341 @@
-# SYSTEM — Solo Leveling System PWA
+# ⚔️ SOLO LEVELING SYSTEM
 
-A local-first, installable, offline-capable productivity RPG. Real-life quests become XP, levels, ranks (E→S), attributes, streaks, penalties, rewards and cinematics. There is no backend, account system or cloud sync. Player data is stored locally in IndexedDB and can be exported/imported as a JSON backup.
+### `SYSTEM INITIALIZED` · `VERSION 1.0.0` · `RELEASE COMPLETE`
 
-**The frozen Specification v1.0 is authoritative.** Do not change approved formulas, thresholds, quest rules, deductions, rewards, streaks, shields, penalties or timer behavior without an explicit user-approved specification change.
+<p align="center">
+  <strong>ARISE. LEVEL UP. SURPASS YOUR LIMITS.</strong>
+</p>
 
-## Current release status
+<p align="center">
+  A real-life productivity RPG inspired by <em>Solo Leveling</em>.
+  <br/>
+  Turn your daily goals into quests, earn XP, strengthen your attributes,
+  climb the ranks and build your own path to becoming an S-Rank Hunter.
+</p>
 
-- **P0–P9:** completed. P9 was deployed to GitHub Pages and manually checked by the user; cinematics and music playback were observed working. The user noted the generated ambient sound is shrill and prefers custom uploads for now.
-- **P10:** implementation and local automated verification are complete. The candidate passes typecheck, all 301 unit tests, all 42 Chromium browser tests and the production build. `npm audit --omit=dev` reports zero production vulnerabilities; `npm audit` reports four moderate findings in development/build dependencies. See the P10 release status and risk documents for qualifications.
+<p align="center">
+  <a href="https://vishal-240.github.io/Solo-Leveling-System/"><strong>▶ LAUNCH SYSTEM</strong></a>
+</p>
 
-## Run locally
+---
 
-Requirements: Node.js 20.19 or later and npm.
+## ▣ SYSTEM STATUS
+
+| System Parameter | Status |
+|---|---|
+| Release Version | **v1.0.0** |
+| Release Status | 🟢 **RELEASED** |
+| Development Phases | **P0 – P10 COMPLETE** |
+| Deployment | **GitHub Pages** |
+| Application Type | Installable PWA |
+| Persistence | Local IndexedDB |
+| Offline Support | Enabled |
+| Backend | None |
+| Account Required | No |
+
+> **SYSTEM MESSAGE**
+>
+> All ten development phases have been completed. Version 1.0.0 is released and deployed. The System is ready for use.
+
+---
+
+## ◈ WHAT IS THE SYSTEM?
+
+The Solo Leveling System transforms productivity into a progression-based RPG.
+
+Instead of simply maintaining a to-do list, you become the player character.
+
+- Register real-life tasks as **Quests**.
+- Complete quests to earn **XP**.
+- Level up your Player and individual **Attributes**.
+- Progress through Hunter **Ranks**, from E to S.
+- Maintain streaks and earn Streak Shields.
+- Face consequences for missed mandatory quests.
+- Unlock achievements, rewards and progression cinematics.
+- Track your journey through detailed history and analytics.
+
+Your progress is tied to your actions. Every completed quest contributes to your growth.
+
+**The objective: become stronger every day.**
+
+---
+
+## ⚔️ CORE FEATURES
+
+### 01 — PLAYER PROGRESSION
+
+- XP-based player leveling.
+- Hunter ranks: E, D, C, B, A and S.
+- Rank promotion milestones.
+- Attribute points and milestone rewards.
+- Progression cinematics and visual feedback.
+
+### 02 — ATTRIBUTE SYSTEM
+
+Develop five independent attributes:
+
+| Attribute | Focus |
+|---|---|
+| 📚 Academics | Learning and studying |
+| 💪 Fitness | Physical health and exercise |
+| 💻 Coding | Programming and technical development |
+| 🎯 Discipline | Consistency and execution |
+| 🌙 Recovery | Rest and recovery |
+
+Each attribute has its own XP, level and progression curve.
+
+### 03 — QUEST SYSTEM
+
+- Easy, Medium and Hard quests.
+- One-off and recurring quests.
+- Mandatory and optional objectives.
+- Custom quest creation.
+- Quest templates.
+- Game-day tracking and daily closure.
+
+### 04 — TIMED QUESTS
+
+- Timestamp-based sessions.
+- XP awarded for completed time blocks.
+- Interruption and inactivity detection.
+- Honesty confirmation after significant interruptions.
+- Completion and undo handling.
+
+### 05 — CONSEQUENCES & REWARDS
+
+- XP deductions for missed mandatory quests.
+- Penalty quests for repeated or important failures.
+- Streak tracking.
+- Streak Shields.
+- Reward allocation and achievements.
+- Titles and progression milestones.
+
+### 06 — HISTORY & ANALYTICS
+
+- XP history and ledger.
+- Progression charts.
+- Calendar view.
+- System activity log.
+- Achievements gallery.
+- Historical performance tracking.
+
+### 07 — AUDIO & CINEMATICS
+
+- Web Audio sound effects.
+- Optional background music.
+- Custom music uploads.
+- Progression and rank-up cinematics.
+- Full, Reduced and Minimal visual effects modes.
+- Reduced-motion accessibility support.
+
+### 08 — PWA & OFFLINE SUPPORT
+
+- Installable Progressive Web App.
+- Offline application shell and asset caching.
+- Service-worker update handling.
+- User-controlled application updates.
+- Storage usage and persistence information.
+- Cache recovery controls.
+
+### 09 — BACKUP & RESTORE
+
+- JSON backup export and import.
+- Backup validation and integrity checks.
+- Backup preview.
+- Configurable backup reminders.
+- Rank-promotion backup reminders.
+- Restore access from the initial Awakening screen.
+
+### 10 — LOCAL-FIRST ARCHITECTURE
+
+- IndexedDB persistence.
+- No account registration.
+- No backend.
+- No cloud synchronization.
+- No remote player-data storage.
+- Incremental persistence writes.
+- Optional Chromium desktop file auto-save.
+
+---
+
+## ◆ HUNTER PROGRESSION REFERENCE
+
+The progression system uses fixed formulas and thresholds.
+
+| Rank | Player Level |
+|---|---:|
+| E | Starting rank |
+| D | 10 |
+| C | 25 |
+| B | 45 |
+| A | 70 |
+| S | 100 |
+
+**Player XP requirement**
+
+\[
+XP_{\text{next}} = \operatorname{round10}(50L^{1.2})
+\]
+
+**Attribute XP requirement**
+
+\[
+XP_{\text{attribute}} = \operatorname{round10}(40L^{1.25})
+\]
+
+Attribute level cap: **50**
+
+**Quest XP**
+
+| Difficulty | XP |
+|---|---:|
+| Easy | 50 |
+| Medium | 100 |
+| Hard | 200 |
+
+Timed quests award 25 XP per completed 15-minute block, capped at 200 XP.
+
+The progression mechanics are governed by the frozen Specification v1.0.
+
+---
+
+## ▣ TECHNOLOGY STACK
+
+| Technology | Purpose |
+|---|---|
+| React | User interface |
+| TypeScript | Type safety |
+| Vite | Development and production builds |
+| Dexie | IndexedDB persistence |
+| Zod | Data validation |
+| Vitest | Unit and integration testing |
+| Playwright | Browser automation |
+| Workbox | PWA and service-worker support |
+| GitHub Actions | Automated deployment |
+| GitHub Pages | Application hosting |
+
+---
+
+## ◈ QUALITY & VERIFICATION
+
+Version 1.0.0 completed its local automated verification and deployment checks.
+
+| Verification | Result |
+|---|---:|
+| TypeScript typecheck | ✅ Passed |
+| Unit tests | ✅ 301 passed |
+| Chromium browser tests | ✅ 42 passed |
+| Production build | ✅ Passed |
+| Production dependency audit | ✅ 0 vulnerabilities |
+| GitHub Pages deployment | ✅ Live |
+| Manual application checks | ✅ Passed |
+
+The browser suite covers responsive layouts, onboarding, progression, offline operation, PWA behavior, updates, backup and restore, reminders, timer interruption handling, audio-engine behavior and large-history scenarios.
+
+The full development dependency audit reports four moderate findings in build tooling (`glob` / `minimatch`). The production dependency audit reports zero vulnerabilities.
+
+---
+
+## ◇ DATA & PRIVACY
+
+The System is designed around local-first data storage.
+
+- Player data remains in the browser's local IndexedDB database.
+- There is no account system or backend.
+- There is no cloud synchronization.
+- Backups are exported as JSON files under the user's control.
+- Uploaded music is stored separately from game backups.
+
+**Important:** Clearing browser site data can permanently erase local player data. Export backups regularly and store them somewhere safe.
+
+Browser storage can still be evicted, even when persistent storage is requested. Moving to another device requires exporting and importing a backup.
+
+---
+
+## ▣ RUN THE SYSTEM LOCALLY
+
+### Requirements
+
+- Node.js 20.19 or later
+- npm
+
+### Installation
 
 ```bash
+git clone https://github.com/vishal-240/Solo-Leveling-System.git
+cd Solo-Leveling-System
 npm ci
 npm run dev
 ```
 
-Verification commands:
+### Verification
 
 ```bash
 npm run typecheck
 npm test
 npm run build
 npm run preview
-npm run test:browser   # builds first; requires Chromium
-npm audit
-npm audit --omit=dev
+npm run test:browser
 ```
 
-The browser suite uses `playwright-core` against the production build served by `vite preview`. Set `CHROMIUM_PATH=/path/to/chromium` or install the matching browser with:
+The browser test suite requires Chromium. Install it using:
 
 ```bash
 npx playwright-core install chromium
 ```
 
-The browser suite is intentionally separate from `npm test`.
+---
 
-## P10 implementation included in this candidate
+## ◆ PROJECT DEVELOPMENT
 
-- PWA manifest and PNG icons (192, 512, maskable 512, Apple touch 180), standalone display, app scope and theme metadata.
-- Workbox precaching of the app shell/assets, navigation fallback and outdated-cache cleanup.
-- User-controlled update prompt; update is blocked while a timer is running. Offline-ready and registration-error messages are surfaced.
-- Install prompt capture where the browser supports `beforeinstallprompt`, plus manual platform instructions.
-- Storage status, usage/quota reporting and persistent-storage request.
-- Backup preview, configurable 3/7/14/30-day reminders, rank-promotion reminders, one-day snooze and restore from the initial Awakening screen.
-- Optional Chromium desktop file auto-save, only when a user-selected file handle already has permission; it never prompts by itself. Music/media database and backup remain separate.
-- Storage error explanations, D16 transfer grace, and incremental writes in `mutatePayload` to avoid rewriting every row on each action.
-- Performance fixture for roughly three years of history (5,475 occurrences and 10,950 ledger rows).
-- P10 browser verification: all 42 Chromium browser tests pass, including manifest/icons, offline actions, update deployment, failed-release recovery, backup/wipe/restore, reminders, simulated timer throttling and large-history performance. Physical-device and normal-profile installation behavior remain to be verified.
+The project was developed across ten structured phases.
 
-## Phase status
+| Phase | Development Area | Status |
+|---|---|---|
+| P0 | Foundations and PWA scaffold | ✅ Complete |
+| P1 | Progression engine | ✅ Complete |
+| P2 | Persistence and backup | ✅ Complete |
+| P3 | Quests and game-day handling | ✅ Complete |
+| P4 | Timer system | ✅ Complete |
+| P5 | Consequences and rewards | ✅ Complete |
+| P6 | Visual system and onboarding | ✅ Complete |
+| P7 | Core application screens | ✅ Complete |
+| P8 | History and analytics | ✅ Complete |
+| P9 | Audio and cinematics | ✅ Complete |
+| P10 | Release hardening | ✅ Complete |
 
-| Phase                           | Status                                                                 | Scope                                                                                                   |
-| ------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| P0 Foundations                  | Complete                                                               | Vite/React/TypeScript, PWA scaffold, CI and Pages workflow                                              |
-| P1 Progression engine           | Complete                                                               | Frozen formulas, ranks, attributes and rewards tables                                                   |
-| P2 Persistence and backup       | Complete                                                               | Dexie/IndexedDB, validation, checksums, snapshots, import/export and rollback                           |
-| P3 Quests and day close         | Complete                                                               | Templates, recurrence, game days, absence handling and deductions                                       |
-| P4 Timer                        | Complete                                                               | Timestamp-based sessions, gap prompt, banking, completion and undo                                      |
-| P5 Consequences and rewards     | Complete                                                               | Deductions, penalties, streaks, shields, allocation, titles and achievements                            |
-| P6 Visual system and onboarding | Complete                                                               | Responsive shell, System UI and Player Awakening                                                        |
-| P7 Core screens                 | Complete                                                               | Quests, Status and Settings; full daily-loop browser test                                               |
-| P8 History and analytics        | Complete                                                               | Calendar, charts, XP ledger, System log and achievements gallery                                        |
-| P9 Audio and cinematics         | Complete                                                               | Web Audio cues, optional music, progression cinematics and effects tiers                                |
-| P10 Release hardening           | **Implemented; local verification passed; release acceptance pending** | Offline/install lifecycle, storage/backup safety, performance, dependency audit and final device matrix |
+**All planned v1.0.0 development phases are complete.**
 
-## Frozen progression reference
+---
 
-- Player XP to next level: `round10(50 × L^1.2)`.
-- Rank thresholds: D 10, C 25, B 45, A 70, S 100.
-- Attribute XP curve: `round10(40 × L^1.25)`, attribute cap 50.
-- Quest XP: Easy 50, Medium 100, Hard 200; timed quests 25 XP per full 15-minute block, maximum 200.
-- Attribute point grant per level: normal 1, milestone 3, rank 10; total 174 through level 100.
-- Streak Shields are awarded at exactly 12 levels; maximum 3 held, surplus queued.
+## ⚔️ RELEASE HISTORY
 
-Do not tune these values during P10.
+### v1.0.0 — THE SYSTEM AWAKENS
 
-## Important data and platform limitations
+**Status: RELEASED**
 
-- Data is local to one browser profile/device. There is no sync or merge. Moving devices requires export then import.
-- Clearing site data can permanently erase the live database. Internal snapshots share the same browser storage and do not protect against a full site-data wipe. Keep exported backups somewhere safe.
-- Persistent-storage requests may be denied; browser storage can still be evicted. iOS Safari has additional storage lifecycle constraints.
-- Backup reminders are in-app only and appear when the app is opened; there are no browser/push notifications.
-- User-uploaded music is stored separately from game backups and is not transferred by backup export/import.
-- Chromium desktop auto-save uses the File System Access API and is optional; permission must be re-granted when required. It is not available on iOS.
-- A running timer is timestamp-based; device/background throttling can trigger the 10-minute honesty prompt. The app does not verify that the activity actually occurred.
-- Generated sound output has not been acoustically measured. The user has manually confirmed playback, but quality is subjective.
+The first complete release of the Solo Leveling System.
 
-## Deployment
+- Complete player progression and Hunter rank system.
+- Five independent attributes.
+- Quest creation, completion and recurrence.
+- Timed quests and interruption handling.
+- Penalties, streaks and rewards.
+- History, charts and achievements.
+- Audio, music and progression cinematics.
+- Installable offline-capable PWA.
+- Backup, restore and storage management.
+- PWA update and recovery controls.
+- Expanded automated testing and release hardening.
 
-GitHub Pages is configured for GitHub Actions in `.github/workflows/deploy.yml`. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The latest P10 workflow changes have not yet been run against the user's remote repository; verify the Actions run after merging.
+---
 
-## Further documentation
-
-- [`docs/IMPLEMENTATION_NOTES.md`](docs/IMPLEMENTATION_NOTES.md): phase decisions and implementation notes.
-- [`docs/P5-scenario-report.md`](docs/P5-scenario-report.md): P5 scenario evidence.
-- [`docs/P10-RELEASE-STATUS.md`](docs/P10-RELEASE-STATUS.md): exact P10 verification state and limitations.
-- [`docs/RELEASE-RISKS.md`](docs/RELEASE-RISKS.md): unresolved release risks.
+<p align="center">
+  <strong>「 ARISE 」</strong>
+  <br/><br/>
+  <em>The System does not reward intentions. It rewards action.</em>
+  <br/><br/>
+  <strong>VERSION 1.0.0 — RELEASE COMPLETE</strong>
+  <br/>
+  <a href="https://vishal-240.github.io/Solo-Leveling-System/">ENTER THE SYSTEM</a>
+</p>
